@@ -4,5 +4,10 @@
 <!--structure_begin-->
 ```
 .
+└── src
+    ├── apps
+    ├── configs
+    ├── eval
+    └── trainer
 ```
 <!--structure_end-->
