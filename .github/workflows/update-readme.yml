@@ -1,0 +1,22 @@
+name: Update README
+
+on: push
+permissions:
+  contents: write
+jobs:
+  updatereadme:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Update README
+      run: bash .github/workflows/update-readme.sh
+
+    - name: Commit and push if it changed
+      run: |
+        git diff
+        git config --global user.email "jlennartz@users.noreply.github.com"
+        git config --global user.name "Jonathan Lennartz"
+        git commit -am "Update README" || exit 0
+        git push
