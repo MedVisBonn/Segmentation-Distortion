@@ -1,14 +1,16 @@
 ### - local folders
 
 # data sets
-data/
+data
 
 # temporary pre-trained models
-pre-trained-tmp/
+pre-trained-tmp
 
 # temporary results / experiments
-results-tmp/
+results-tmp
 
+# helper functions
+helper-tmp
 
 ### - standard python gitignore provided by github
 
