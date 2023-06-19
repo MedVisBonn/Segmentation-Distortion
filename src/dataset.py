@@ -1,5 +1,6 @@
 """
-This script collects the Dataset classes for the CC-359, ACDC and M&M data sets.
+This script collects the Dataset classes for the CC-359, 
+ACDC and M&M data sets.
 
 Usage: serves only as a collection of individual functionalities
 Authors: Rasha Sheikh, Jonathan Lennartz
@@ -8,26 +9,18 @@ Authors: Rasha Sheikh, Jonathan Lennartz
 
 # - standard packages
 import os
-from typing import Iterable, Dict, Callable, Tuple, Union
-from collections import namedtuple
 
 # - third party packages
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from torch import Tensor
-from torch import nn
-import torch.nn.functional as F
 from torchvision.transforms import (
     Resize,
     CenterCrop,
-    RandAugment,
-    RandomApply,
     Normalize,
     functional,
 )
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import KFold
 import nibabel as nib
 from batchgenerators.utilities.file_and_folder_operations import *
 from nnunet.paths import preprocessing_output_dir
@@ -130,7 +123,7 @@ class CalgaryCampinasDataset(Dataset):
         else:
             startw = w // 2 - (cropw // 2)
             starth = h // 2 - (croph // 2)
-            return img[:, startw : startw + cropw, starth : starth + croph]
+            return img[:, startw:startw + cropw, starth:starth + croph]
 
     def unify_sizes(self, input_images, input_labels):
         sizes = np.zeros(len(input_images), int)
@@ -140,8 +133,10 @@ class CalgaryCampinasDataset(Dataset):
 
         for i in range(len(input_images)):
             if sizes[i] != max_size:
-                input_images[i] = self.pad_image_w_size(input_images[i], max_size)
-                input_labels[i] = self.pad_image_w_size(input_labels[i], max_size)
+                input_images[i] = self.pad_image_w_size(input_images[i],
+                        max_size)
+                input_labels[i] = self.pad_image_w_size(input_labels[i],
+                        max_size)
         return input_images, input_labels
 
     def load_files(self, data_path):
@@ -224,10 +219,10 @@ class CalgaryCampinasDataset(Dataset):
 
     def __getitem__(self, idx):
         if self.volume_wise:
-            data = self.data[self.volume_ranges[idx] : self.volume_ranges[idx + 1]]
-            labels = self.label[self.volume_ranges[idx] : self.volume_ranges[idx + 1]]
+            data = self.data[self.volume_ranges[idx]:self.volume_ranges[idx + 1]]
+            labels = self.label[self.volume_ranges[idx]:self.volume_ranges[idx + 1]]
             voxel_dim = self.voxel_dim[
-                self.volume_ranges[idx] : self.volume_ranges[idx + 1]
+                self.volume_ranges[idx]:self.volume_ranges[idx + 1]
             ]
         else:
             data = self.data[idx]
@@ -320,11 +315,13 @@ class MNMDataset(Dataset):
     # 3: GE
     # 4: Canon
 
-    def __init__(self, vendor: str, debug: bool = False):
+    def __init__(self, vendor: str, debug: bool = False, adapt_size: str = "crop"):
         self.vendor = vendor
         self.debug = debug
-        self.crop = CenterCrop([256, 256])
-        # self.resize = Resize((256, 224))
+        if adapt_size == "crop":
+            self.crop = CenterCrop([256, 256])
+        elif adapt_size == "resize":
+            self.resize = Resize((256, 224))
         self._get_dataset_information()
         self._load_selected_cases()
 
