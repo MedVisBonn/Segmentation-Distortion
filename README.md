@@ -2,7 +2,7 @@
 
 ## Directory Structure
 <!--structure_begin-->
-```
+```bash
 .
 ├── data -> ../Thesis/data
 ├── pre-trained
