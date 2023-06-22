@@ -2,8 +2,7 @@ import torch
 from torch import nn, Tensor
 from typing import Iterable, Dict, Callable, Tuple, Union
 from copy import deepcopy
-from model.UNet2D20 import UNet2D
-from losses import KL_loss_VAE
+from model.unet import UNet2D
 
 
 class Frankenstein(nn.Module):
@@ -19,7 +18,7 @@ class Frankenstein(nn.Module):
         self,
         seg_model: nn.Module,
         transformations: nn.ModuleDict,
-        disabled_ids: list[str] = [],
+        disabled_ids: list = [],
         copy: bool = True,
     ):
         super().__init__()

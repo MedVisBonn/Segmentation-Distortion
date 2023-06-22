@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch.nn import Module
 from typing import Iterable, Dict, Callable, Tuple, Union
 
-from model.layers import ConvBlock, ConvBlockLegacy, ConvBlockOld, ReshapeLayer
+from model.layers import ConvBlock, ReshapeLayer
 
 
 class AE(nn.Module):

@@ -24,9 +24,11 @@ class ConvBlock(nn.Module):
         padding: int = 1,
         block_size: int = 1,
         reverse: bool = False,
+        residual: str = False
     ):
         super().__init__()
         self.block_size = block_size
+        self.residual = residual
 
         in_channels = int(in_channels)
         out_channels = int(out_channels)
@@ -111,7 +113,7 @@ class ConvBlock(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if self.block_size > 1:
-            x = self.block(x)
+            x = x + self.block(x) if self.residual else self.block(x)
         return self.sample(x)
 
 
