@@ -24,7 +24,7 @@ class ConvBlock(nn.Module):
         padding: int = 1,
         block_size: int = 1,
         reverse: bool = False,
-        residual: str = False
+        residual: bool = False
     ):
         super().__init__()
         self.block_size = block_size
