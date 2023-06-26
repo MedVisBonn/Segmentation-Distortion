@@ -22,8 +22,6 @@ from losses import SampleDice, UnetDice, DiceScoreMMS, CrossEntropyTargetArgmax
 from trainer.unet_trainer import UNetTrainerACDC
 
 
-
-
         
 def main(args):
     
@@ -32,9 +30,7 @@ def main(args):
         arg = arguments.popleft()
         if arg in ['-i', '--iteration']:
             it = arguments.popleft() 
-            
-            
-            
+                        
     ### Dataloader
     ## Initialize trainer to get data loaders with data augmentations from training
     nnUnet_prefix = '../../../nnUNet/'
