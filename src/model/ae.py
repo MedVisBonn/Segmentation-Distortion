@@ -62,7 +62,7 @@ class AE(nn.Module):
             reverse=True,
         )
         self.decoder = self._built_decoder(in_channels, in_dim, depth)
-        self.final = nn.Conv2d(in_channels, in_channels, 1)
+        self.tmp = nn.Conv2d(in_channels, in_channels, 1)
 
     def _built_encoder(self, in_channels: int, in_dim: int, depth: int) -> nn.Module:
         encoder = nn.Sequential(
@@ -148,7 +148,7 @@ class AE(nn.Module):
             z = self.spatial(z)
             z = self.intermediate_conv_reverse(z)
             z = self.decoder(z)
-            z = self.final(z)
+            z = self.tmp(z)
             return z
 
         else:
