@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 sys.path.append('../')
 from dataset import ACDCDataset, MNMDataset
 from model.unet import UNet2D
+from model.ae import AE
+from model.wrapper import Frankenstein
 from losses import DiceScoreMMS
 from utils import  epoch_average
 
@@ -40,6 +42,9 @@ def test_set(model: nn.Module, dataloader: DataLoader, eval_metrics: Dict) -> Di
         epoch_metrics[key] = epoch_average(epoch_scores, batch_sizes)
         
     return epoch_metrics
+
+
+
 
 
 def main():
@@ -73,7 +78,31 @@ def main():
     
     
     # - instantiate U-Net
-    unet = UNet2D(n_chans_in=1, n_chans_out=4, n_filters_init=8).to(0)
+    unet = UNet2D(n_chans_in=1, n_chans_out=4, n_filters_init=8).cuda()
+    
+    # - instantiate transformations
+    layer_ids = ['shortcut0', 'shortcut1', 'shortcut2', 'up3']
+    disabled_ids = ['shortcut0', 'shortcut1', 'shortcut2']
+
+                       #    channel, spatial, latent,  depth, block 
+    ae_map   = {'up3': [        64,      32,    128,     2,      4]}
+
+
+    AEs = nn.ModuleDict({'up3': AE(in_channels = ae_map['up3'][0], 
+                                        in_dim      = ae_map['up3'][1],
+                                        latent_dim  = ae_map['up3'][2],
+                                        depth       = ae_map['up3'][3],
+                                        block_size  = ae_map['up3'][4])})
+
+    for layer_id in disabled_ids:
+         AEs[layer_id] = nn.Identity()
+
+    model = Frankenstein(unet, 
+                         AEs, 
+                         disabled_ids=disabled_ids,
+                         copy=True)
+    model.cuda()
+
     # - evaluation metrics
     eval_metrics = {
             "Volumetric Dice": DiceScoreMMS()
@@ -86,19 +115,23 @@ def main():
     for i in range(10):
         # - path
         root = '../../'
-        unet_path = f"acdc_unet8_{i}"
-        print(f"U-Net: {i} - path {unet_path}")
         # - load params
-        model_path = f'{root}pre-trained-tmp/trained_UNets/{unet_path}_best.pt'
+        ae_path = f'acdc_ae{i}'
+        model_path = f'{root}pre-trained-tmp/trained_AEs/{ae_path}_best.pt'
         state_dict = torch.load(model_path)['model_state_dict']
-        unet.load_state_dict(state_dict)
+        model.load_state_dict(state_dict)
+        # hook transformations such that the model output does only contain
+        # the forward pass of the transformed feature maps via the n_samples
+        # key word (i.e. setting it to -1)
+        model.hook_transformations(model.transformations, n_samples=-1)
+        print(f"Model: {i} - path {ae_path}")
         # loop over all sets
         for key in loader:
             print(f"    Vendor: {key}")
-            dice = test_set(unet, loader[key], eval_metrics)
+            dice = test_set(model, loader[key], eval_metrics)
             results[key].append(dice['Volumetric Dice'].item())
             
-        np.save('../../results-tmp/heart_unet_results.npy', results)
+        np.save('../../results-tmp/heart_downstream_results.npy', results)
             
             
 if __name__ == '__main__':    
