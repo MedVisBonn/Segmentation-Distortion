@@ -245,7 +245,7 @@ class PoolingMahalabonisDetector(nn.Module):
     
 class AEMahalabonisDetector(nn.Module):
     """
-    Evaluation class for OOD and ESCE tasks based on VAEs.
+    Evaluation class for OOD and ESCE tasks based on AEs.
     """
     
     def __init__(
@@ -569,7 +569,7 @@ class MeanDistSamplesDetector(nn.Module):
     
 class EntropyDetector(nn.Module):
     """
-    Evaluation class for OOD and ESCE tasks based on VAEs.
+    Evaluation class for OOD and ESCE tasks based on AEs.
     """
     
     def __init__(
@@ -776,3 +776,115 @@ class DropoutEntropyDetector(nn.Module):
         umap  = self.umap_generator(samples)
         score = torch.linalg.norm(umap, dim=(-2, -1))
         return score, net_out
+    
+    
+class EnsembleEntropyDetector(nn.Module):
+    """
+    Evaluation class for OOD and ESCE tasks based on AEs.
+    """
+    
+    def __init__(
+        self, 
+        model: nn.Module, 
+        net_out: str,
+        valid_loader: DataLoader,
+        criterion: nn.Module,
+        device: str = 'cuda:0'
+    ):
+        super().__init__()
+        self.net_out = net_out
+        self.device = device
+        self.model = model.to(device)
+        torch.manual_seed(42)
+        self.ensemble_compositions = torch.cat([torch.arange(10).view(10,1), 
+                                                torch.randint(0, 9, (10, 4))],
+                                               dim=1)
+        # Remove trainiung hooks, add evaluation hooks
+        # self.model.remove_all_hooks()        
+        
+        self.valid_loader = valid_loader
+        self.criterion = criterion
+        self.umap_generator = UMapGenerator(method='probs',
+                                            net_out=net_out)
+        
+        
+    @torch.no_grad()
+    def testset_ood_detection(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
+        
+        if not hasattr(self, 'threshold'):
+            valid_dists = []
+            for batch in self.valid_loader:
+                input_ = batch['input'].to(0)
+                net_out = self.forward(input_.to(self.device))
+                score = torch.norm(umap).cpu()
+                valid_dists.append(score)
+                    
+            self.threshold = 0
+            valid_dists = torch.tensor(valid_dists)
+            self.threshold = torch.sort(valid_dists)[0][len(valid_dists) - (len(valid_dists) // 20) - 1]
+        
+        test_dists = []
+        for batch in test_loader:
+            input_ = batch['input']
+
+            net_out = self.forward(input_.to(self.device))
+
+            score = torch.norm(umap).cpu()
+            test_dists.append(score)
+            
+        test_dists = torch.tensor(test_dists).cpu()
+        accuracy = (test_dists > self.threshold).sum() / len(test_dists)
+        
+        return accuracy    
+        
+    
+    @torch.no_grad()
+    def testset_correlation(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
+        corr_coeffs = [SpearmanCorrCoef() for _ in range(10)]
+        losses = []
+        for batch in tqdm(test_loader):
+            input_ = batch['input'].to(0)
+            target = batch['target']
+            
+            if self.net_out == 'calgary':
+                net_out_volume = []
+
+                for input_chunk in input_:
+                    net_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                    net_out_volume.append(net_out.detach().cpu())
+                net_out = torch.stack(net_out_volume, dim=0)
+
+            if self.net_out == 'mms':
+                target[target == -1] = 0
+                # convert to one-hot encoding
+                target = F.one_hot(target.long(), num_classes=4).squeeze(1).permute(0,3,1,2)
+                net_out = self.forward(input_.to(self.device))
+            
+            
+            for i, corr_coeff in enumerate(corr_coeffs):
+                ensemble_idxs = self.ensemble_compositions[i]
+                
+                if self.net_out == 'calgary':
+                    loss = self.criterion(net_out[:, i:i+1].cpu(), target.cpu())
+                    umap_volume  = []
+                    for slc in net_out:
+                        umap = self.umap_generator(slc[ensemble_idxs].mean(0, keepdim=True))
+                        umap_volume.append(umap)
+                    umap = torch.cat(umap_volume, dim=0)
+                
+                if self.net_out == 'mms':
+                    loss = self.criterion(net_out[i:i+1].cpu(), target.cpu())
+                    umap = self.umap_generator(net_out[ensemble_idxs].mean(0, keepdim=True))
+                    
+                score = torch.norm(umap).cpu()    
+                loss = loss.mean().cpu().float()
+                corr_coeff.update(score, 1-loss)
+            
+        return corr_coeffs
+
+    
+    @torch.no_grad()  
+    def forward(self, input_: torch.Tensor) -> torch.Tensor:
+        self.model.eval()
+        net_out = self.model(input_)
+        return net_out

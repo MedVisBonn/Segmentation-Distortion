@@ -1,23 +1,28 @@
+eval_unets_heart.pyeval_unets_heart.pyeval_unets_heart.pyeval_unets_heart.pyeval_unets_heart.pyimport warnings
+import sys
 import collections
+from random import sample, seed
+
 import torch
 from torch import nn, Tensor
 from torch.utils.data import Dataset, DataLoader, default_collate
-from random import sample, seed
 from tqdm.auto import tqdm
-import warnings
-warnings.filterwarnings("ignore")
-import sys
-sys.path.append('..')
 
+warnings.filterwarnings("ignore")
+sys.path.append('..')
 from dataset import CalgaryCampinasDataset, ACDCDataset, MNMDataset
 from model.unet import UNet2D, UNetEnsemble
 from model.ae import AE
 from model.wrapper import Frankenstein
 from losses import DiceScoreCalgary, DiceScoreMMS, SurfaceDiceCalgary
 from utils import volume_collate
-from eval.slice_wise import PoolingMahalabonisDetector, AEMahalabonisDetector, MeanDistSamplesDetector, EntropyDetector
-
-
+from eval.slice_wise import (
+    PoolingMahalabonisDetector, 
+    AEMahalabonisDetector, 
+    MeanDistSamplesDetector, 
+    EntropyDetector, 
+    EnsembleEntropyDetector
+)
 
 def main(args):
     arguments = collections.deque(args)
@@ -39,7 +44,6 @@ def main(args):
     # Globals
     ROOT = '../../'
     SEED = 42
-    
     
     # Dataset
     if net_out == 'calgary':
@@ -244,7 +248,20 @@ def main(args):
             if task == 'ood' or task == 'both':
                 metrics[i]['ood'] = detector.testset_ood_detection(test_loader)
             if task == 'corr' or task == 'both':
-                metrics[i]['corr'] = detector.testset_correlation(test_loader)                
+                metrics[i]['corr'] = detector.testset_correlation(test_loader)  
+                
+                
+    if method == 'ensemble':
+        ensemble = UNetEnsemble(unets)
+        detector = EnsembleEntropyDetector(model=ensemble, 
+                                           net_out=net_out, 
+                                           valid_loader=valid_loader, 
+                                           criterion=DiceScoreCalgary() if net_out=='calgary' else DiceScoreMMS())
+        
+        if task == 'ood' or task == 'both':
+            metrics[i]['ood'] = detector.testset_ood_detection(test_loader)
+        if task == 'corr' or task == 'both':
+            metrics[i]['corr'] = detector.testset_correlation(test_loader)  
                 
         
     for i, matric in enumerate(metrics):

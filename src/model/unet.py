@@ -202,5 +202,9 @@ class UNetEnsemble(nn.Module):
         super().__init__()
         self.ensemble = nn.ModuleList(unets)
 
-    def forward(self, x):
-        return torch.stack([module(x.clone()) for module in self.ensemble]).mean(0)
+    def forward(self, x, reduce='none'):
+        x_out = torch.cat([module(x.clone()) for module in self.ensemble])
+        if reduce=='none':
+            return x_out
+        elif reduce=='mean':
+            return x_out.mean(0)
