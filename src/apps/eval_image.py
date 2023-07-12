@@ -1,4 +1,4 @@
-eval_unets_heart.pyeval_unets_heart.pyeval_unets_heart.pyeval_unets_heart.pyeval_unets_heart.pyimport warnings
+import warnings
 import sys
 import collections
 from random import sample, seed
@@ -40,6 +40,8 @@ def main(args):
                 scanner = int(scanner)
         if arg in ['--debug']:
             debug = True if arguments.popleft() == 'yes' else False
+            
+    print(f'{net_out}-{method}-{task}-{scanner}')
             
     # Globals
     ROOT = '../../'
@@ -131,7 +133,7 @@ def main(args):
     # U-Nets
     middle = 'unet' if net_out == 'calgary' else 'unet8_'
     pre = 'calgary' if net_out == 'calgary' else 'acdc'
-    unet_names = [f'{pre}_{middle}{i}' for i in range(1)] #TODO
+    unet_names = [f'{pre}_{middle}{i}' for i in range(10)] #TODO
     unets = []
     for name in unet_names:
         model_path = f'{ROOT}pre-trained-tmp/trained_UNets/{name}_best.pt'
@@ -252,6 +254,7 @@ def main(args):
                 
                 
     if method == 'ensemble':
+        metrics = {}
         ensemble = UNetEnsemble(unets)
         detector = EnsembleEntropyDetector(model=ensemble, 
                                            net_out=net_out, 
@@ -259,15 +262,25 @@ def main(args):
                                            criterion=DiceScoreCalgary() if net_out=='calgary' else DiceScoreMMS())
         
         if task == 'ood' or task == 'both':
-            metrics[i]['ood'] = detector.testset_ood_detection(test_loader)
+            metrics['ood'] = detector.testset_ood_detection(test_loader)
         if task == 'corr' or task == 'both':
-            metrics[i]['corr'] = detector.testset_correlation(test_loader)  
+            metrics['corr'] = detector.testset_correlation(test_loader)  
+    
+    
+        for task in metrics:
+            for i, result in enumerate(metrics[task]):
+                save_path = f'{ROOT}results-tmp/results/eval/{net_out.lower()}/image/'
+                save_name = f'{net_out}-{method}_tmp-{task}-{scanner}-{i}'
+                if task == 'ood':
+                    result = result.item()
+                out = {task: result}
+                torch.save(out, save_path + save_name)
                 
-        
-    for i, matric in enumerate(metrics):
-        save_path = f'{ROOT}results-tmp/results/eval/{net_out.lower()}/image/'
-        save_name = f'{net_out}-{method}-{task}-{scanner}-{i}'
-        torch.save(matric, save_path + save_name)
+    if method != 'ensemble':
+        for i, matric in enumerate(metrics):
+            save_path = f'{ROOT}experiments/results/eval/{net_out.lower()}/image/'
+            save_name = f'{net_out}-{method}-{task}-{scanner}-{i}'
+            torch.save(matric, save_path + save_name)
 
 
         

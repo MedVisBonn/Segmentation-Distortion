@@ -816,26 +816,27 @@ class EnsembleEntropyDetector(nn.Module):
             for batch in self.valid_loader:
                 input_ = batch['input'].to(0)
                 net_out = self.forward(input_.to(self.device))
-                score = torch.norm(umap).cpu()
-                valid_dists.append(score)
-                    
-            self.threshold = 0
-            valid_dists = torch.tensor(valid_dists)
-            self.threshold = torch.sort(valid_dists)[0][len(valid_dists) - (len(valid_dists) // 20) - 1]
-        
+                umap = self.umap_generator(net_out)
+                scores = torch.sqrt((umap**2).sum(dim=(1,2))).cpu()
+                valid_dists.append(scores)
+            valid_dists = torch.stack(valid_dists, dim=0)
+            
+            self.thresholds = torch.sort(valid_dists)[0][len(valid_dists) - 
+                                                         (len(valid_dists) // 20) - 1,
+                                                         :].view(1, -1)
+            
         test_dists = []
         for batch in test_loader:
             input_ = batch['input']
-
             net_out = self.forward(input_.to(self.device))
-
-            score = torch.norm(umap).cpu()
-            test_dists.append(score)
+            umap = self.umap_generator(net_out)
+            scores = torch.sqrt((umap**2).sum(dim=(1,2))).cpu()
+            test_dists.append(scores)
             
-        test_dists = torch.tensor(test_dists).cpu()
-        accuracy = (test_dists > self.threshold).sum() / len(test_dists)
+        test_dists = torch.stack(test_dists, dim=0).cpu()
+        accuracy = (test_dists > self.thresholds).sum(dim=0) / len(test_dists)
         
-        return accuracy    
+        return accuracy       
         
     
     @torch.no_grad()
@@ -873,7 +874,8 @@ class EnsembleEntropyDetector(nn.Module):
                     umap = torch.cat(umap_volume, dim=0)
                 
                 if self.net_out == 'mms':
-                    loss = self.criterion(net_out[i:i+1].cpu(), target.cpu())
+                    #loss = self.criterion(net_out[i:i+1].cpu(), target.cpu())
+                    loss = self.criterion(net_out[ensemble_idxs].mean(dim=0, keepdim=True).cpu(), target.cpu())
                     umap = self.umap_generator(net_out[ensemble_idxs].mean(0, keepdim=True))
                     
                 score = torch.norm(umap).cpu()    
