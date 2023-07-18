@@ -1,4 +1,4 @@
-import os, sys
+Das
 from typing import Iterable, Dict, List, Callable, Tuple, Union, List
 
 import numpy as np
@@ -8,8 +8,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-sys.path.append('../')
-from dataset import ACDCDataset, MNMDataset
+Das
 from model.unet import UNet2D, UNetEnsemble
 from losses import DiceScoreMMS
 from utils import  epoch_average

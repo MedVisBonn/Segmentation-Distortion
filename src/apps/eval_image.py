@@ -270,7 +270,7 @@ def main(args):
         for task in metrics:
             for i, result in enumerate(metrics[task]):
                 save_path = f'{ROOT}results-tmp/results/eval/{net_out.lower()}/image/'
-                save_name = f'{net_out}-{method}_tmp-{task}-{scanner}-{i}'
+                save_name = f'{net_out}-{method}_tmp-{task}-{scanner}-{i}_auroc'
                 if task == 'ood':
                     result = result.item()
                 out = {task: result}
@@ -278,8 +278,8 @@ def main(args):
                 
     if method != 'ensemble':
         for i, matric in enumerate(metrics):
-            save_path = f'{ROOT}experiments/results/eval/{net_out.lower()}/image/'
-            save_name = f'{net_out}-{method}-{task}-{scanner}-{i}'
+            save_path = f'{ROOT}results-tmp/results/eval/{net_out.lower()}/image/'
+            save_name = f'{net_out}-{method}-{task}-{scanner}-{i}_auroc'
             torch.save(matric, save_path + save_name)
 
 

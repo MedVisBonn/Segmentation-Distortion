@@ -9,8 +9,9 @@ from sklearn.metrics import pairwise_distances_argmin_min #
 from sklearn.covariance import LedoitWolf #
 from scipy.stats import binned_statistic #
 from tqdm.auto import tqdm #
-from torchmetrics import SpearmanCorrCoef
-
+from torchmetrics import (
+    SpearmanCorrCoef, 
+    AUROC)
 from losses import DiceScoreCalgary, DiceScoreMMS #
 from utils import _activate_dropout, UMapGenerator
 
@@ -80,6 +81,7 @@ class PoolingMahalabonisDetector(nn.Module):
         self.net_out      = net_out
         self.criterion    = criterion
         self.pool         = nn.AvgPool3d(kernel_size=(2,2,2), stride=(2,2,2))
+        self.auroc        = AUROC(task = 'binary')
         
         # Init score dict for each layer:
         self.latents   = {layer_id: [] for layer_id in self.layer_ids}
@@ -137,31 +139,39 @@ class PoolingMahalabonisDetector(nn.Module):
             
     @torch.no_grad()
     def testset_ood_detection(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
-        if not hasattr(self, 'thresholds'):
-            valid_dists = {layer_id : [] for layer_id in self.layer_ids}
-            for batch in self.valid_loader:
-                input_ = batch['input']
-                if self.net_out == 'calgary':
-                    dist_volume = []
-                    for input_chunk in input_:
-                        dist, _ = self.forward(input_chunk.unsqueeze(0).to(self.device))
-                        dist_volume.append(dist.copy())
-                    dist = default_collate(dist_volume)
-                elif self.net_out == 'mms': 
-                    dist, _ = self.forward(input_.to(self.device))
-                for layer_id in self.layer_ids:
-                    if self.net_out == 'calgary':
-                        valid_dists[layer_id].append(dist[layer_id].mean())
-                    elif self.net_out == 'mms':
-                        valid_dists[layer_id].append(dist[layer_id])
-            
-            self.thresholds = {layer_id : 0 for layer_id in self.layer_ids}
+        
+        self.pred = {}
+        self.target = {}
+        
+        valid_dists = {layer_id : [] for layer_id in self.layer_ids}
+        for batch in self.valid_loader:
+            input_ = batch['input']
+            #print(input_.shape)
+            if self.net_out == 'calgary':
+                dist_volume = []
+                for input_chunk in input_:
+                    dist, _ = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                    dist_volume.append(dist.copy())
+                dist = default_collate(dist_volume)
+            elif self.net_out == 'mms': 
+                dist, _ = self.forward(input_.to(self.device))
             for layer_id in self.layer_ids:
                 if self.net_out == 'calgary':
-                    valid_dists[layer_id] = torch.tensor(valid_dists[layer_id]).cpu()
+                    valid_dists[layer_id].append(dist[layer_id].mean())
                 elif self.net_out == 'mms':
-                    valid_dists[layer_id] = torch.cat(valid_dists[layer_id], dim=0).cpu()
-                self.thresholds[layer_id] = torch.sort(valid_dists[layer_id])[0][len(valid_dists[layer_id]) - (len(valid_dists[layer_id]) // 20) - 1]
+                    valid_dists[layer_id].append(dist[layer_id])
+        self.valid_dists = valid_dists
+        self.valid_labels = {layer_id: torch.zeros(len(self.valid_dists[layer_id]), dtype=torch.uint8) 
+                             for layer_id in self.layer_ids}
+        #print(len(self.valid_dists['up3']), len(self.valid_labels['up3']))
+            
+#             self.thresholds = {layer_id : 0 for layer_id in self.layer_ids}
+#             for layer_id in self.layer_ids:
+#                 if self.net_out == 'calgary':
+#                     valid_dists[layer_id] = torch.tensor(valid_dists[layer_id]).cpu()
+#                 elif self.net_out == 'mms':
+#                     valid_dists[layer_id] = torch.cat(valid_dists[layer_id], dim=0).cpu()
+#                 self.thresholds[layer_id] = torch.sort(valid_dists[layer_id])[0][len(valid_dists[layer_id]) - (len(valid_dists[layer_id]) // 20) - 1]
                 
                     
         test_dists = {layer_id : [] for layer_id in self.layer_ids}
@@ -173,24 +183,38 @@ class PoolingMahalabonisDetector(nn.Module):
                     dist, _ = self.forward(input_chunk.unsqueeze(0).to(self.device))
                     dist_volume.append(dist.copy())
                 dist = default_collate(dist_volume)
-            if self.net_out == 'mms': 
+            elif self.net_out == 'mms': 
                 dist, _ = self.forward(input_.to(self.device))
-                
             for layer_id in self.layer_ids:
                 if self.net_out == 'calgary':
                     test_dists[layer_id].append(dist[layer_id].mean())
                 elif self.net_out == 'mms':    
                     test_dists[layer_id].append(dist[layer_id])
-                    
-        accuracy = {layer_id : 0 for layer_id in self.layer_ids}
+        
+        self.test_dists = test_dists
+        self.test_labels = {layer_id: torch.ones(len(self.test_dists[layer_id]), dtype=torch.uint8) 
+                             for layer_id in self.layer_ids}
+            
+            
+        AUROC = {layer_id : 0 for layer_id in self.layer_ids}
         for layer_id in self.layer_ids:
             if self.net_out == 'calgary':
-                test_dists[layer_id] = torch.tensor(test_dists[layer_id]).cpu()
+                self.valid_dists[layer_id] = torch.tensor(self.valid_dists[layer_id]).cpu()
+                self.test_dists[layer_id]  = torch.tensor(self.test_dists[layer_id]).cpu()
             elif self.net_out == 'mms':
-                test_dists[layer_id] = torch.cat(test_dists[layer_id], dim=0).cpu()
-            accuracy[layer_id] = ((test_dists[layer_id] > self.thresholds[layer_id]).sum() / len(test_dists[layer_id]))
+                self.valid_dists[layer_id] = torch.cat(self.valid_dists[layer_id], dim=0).cpu()
+                self.test_dists[layer_id]  = torch.cat(self.test_dists[layer_id], dim=0).cpu()
+            self.pred[layer_id]   = torch.cat([self.valid_dists[layer_id], self.test_dists[layer_id]]).squeeze()
+            self.target[layer_id] = torch.cat([self.valid_labels[layer_id], self.test_labels[layer_id]]).squeeze()
+            
+            print(self.pred[layer_id].shape, self.target[layer_id].shape)
+            
+            AUROC[layer_id] = self.auroc(self.pred[layer_id], self.target[layer_id])
+            #accuracy[layer_id] = ((test_dists[layer_id] > self.thresholds[layer_id]).sum() / len(test_dists[layer_id]))
                 
-        return accuracy
+        return AUROC
+    
+    
     
     @torch.no_grad()        
     def testset_correlation(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
@@ -243,6 +267,7 @@ class PoolingMahalabonisDetector(nn.Module):
         return self.dist, net_out
     
     
+    
 class AEMahalabonisDetector(nn.Module):
     """
     Evaluation class for OOD and ESCE tasks based on AEs.
@@ -266,6 +291,7 @@ class AEMahalabonisDetector(nn.Module):
         self.valid_loader = valid_loader
         self.net_out      = net_out
         self.criterion    = criterion
+        self.auroc        = AUROC(task = 'binary')
         
         # Remove training hooks if necessary
         self.model.remove_all_hooks()
@@ -274,7 +300,7 @@ class AEMahalabonisDetector(nn.Module):
         self.model.to(device)
         self.model.eval()
         self.model.freeze_seg_model()
-
+        
         # Init score dict for each layer:
         self.latents = {layer_id: [] for layer_id in self.layer_ids}
         self.mu = {layer_id: None for layer_id in self.layer_ids}
@@ -329,10 +355,14 @@ class AEMahalabonisDetector(nn.Module):
             
     @torch.no_grad()
     def testset_ood_detection(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
-        if not hasattr(self, 'thresholds'):
+        
+        self.pred = {}
+        self.target = {}
+        if not hasattr(self, 'valid_dists'):
             valid_dists = {layer_id : [] for layer_id in self.layer_ids}
             for batch in self.valid_loader:
                 input_ = batch['input']
+                #print(input_.shape)
                 if self.net_out == 'calgary':
                     dist_volume = []
                     for input_chunk in input_:
@@ -346,14 +376,18 @@ class AEMahalabonisDetector(nn.Module):
                         valid_dists[layer_id].append(dist[layer_id].mean())
                     elif self.net_out == 'mms':
                         valid_dists[layer_id].append(dist[layer_id])
+            self.valid_dists = valid_dists
+            self.valid_labels = {layer_id: torch.zeros(len(self.valid_dists[layer_id]), dtype=torch.uint8) 
+                                 for layer_id in self.layer_ids}
+        #print(len(self.valid_dists['up3']), len(self.valid_labels['up3']))
             
-            self.thresholds = {layer_id : 0 for layer_id in self.layer_ids}
-            for layer_id in self.layer_ids:
-                if self.net_out == 'calgary':
-                    valid_dists[layer_id] = torch.tensor(valid_dists[layer_id]).cpu()
-                elif self.net_out == 'mms':
-                    valid_dists[layer_id] = torch.cat(valid_dists[layer_id], dim=0).cpu()
-                self.thresholds[layer_id] = torch.sort(valid_dists[layer_id])[0][len(valid_dists[layer_id]) - (len(valid_dists[layer_id]) // 20) - 1]
+#             self.thresholds = {layer_id : 0 for layer_id in self.layer_ids}
+#             for layer_id in self.layer_ids:
+#                 if self.net_out == 'calgary':
+#                     valid_dists[layer_id] = torch.tensor(valid_dists[layer_id]).cpu()
+#                 elif self.net_out == 'mms':
+#                     valid_dists[layer_id] = torch.cat(valid_dists[layer_id], dim=0).cpu()
+#                 self.thresholds[layer_id] = torch.sort(valid_dists[layer_id])[0][len(valid_dists[layer_id]) - (len(valid_dists[layer_id]) // 20) - 1]
                 
                     
         test_dists = {layer_id : [] for layer_id in self.layer_ids}
@@ -367,22 +401,33 @@ class AEMahalabonisDetector(nn.Module):
                 dist = default_collate(dist_volume)
             elif self.net_out == 'mms': 
                 dist, _ = self.forward(input_.to(self.device))
-                
             for layer_id in self.layer_ids:
                 if self.net_out == 'calgary':
                     test_dists[layer_id].append(dist[layer_id].mean())
                 elif self.net_out == 'mms':    
                     test_dists[layer_id].append(dist[layer_id])
-                    
-        accuracy = {layer_id : 0 for layer_id in self.layer_ids}
+        
+        self.test_dists = test_dists
+        self.test_labels = {layer_id: torch.ones(len(self.test_dists[layer_id]), dtype=torch.uint8) 
+                             for layer_id in self.layer_ids}
+            
+            
+        AUROC = {layer_id : 0 for layer_id in self.layer_ids}
         for layer_id in self.layer_ids:
             if self.net_out == 'calgary':
-                test_dists[layer_id] = torch.tensor(test_dists[layer_id]).cpu()
+                self.valid_dists[layer_id] = torch.tensor(self.valid_dists[layer_id]).cpu()
+                self.test_dists[layer_id]  = torch.tensor(self.test_dists[layer_id]).cpu()
             elif self.net_out == 'mms':
-                test_dists[layer_id] = torch.cat(test_dists[layer_id], dim=0).cpu()
-            accuracy[layer_id] = ((test_dists[layer_id] > self.thresholds[layer_id]).sum() / len(test_dists[layer_id]))
+                self.valid_dists[layer_id] = torch.cat(self.valid_dists[layer_id], dim=0).cpu()
+                self.test_dists[layer_id]  = torch.cat(self.test_dists[layer_id], dim=0).cpu()
+            self.pred[layer_id]   = torch.cat([self.valid_dists[layer_id], self.test_dists[layer_id]]).squeeze()
+            self.target[layer_id] = torch.cat([self.valid_labels[layer_id], self.test_labels[layer_id]]).squeeze()
+            #print(self.pred[layer_id].shape, self.target[layer_id].shape)
+            AUROC[layer_id] = self.auroc(self.pred[layer_id], self.target[layer_id])
+            #accuracy[layer_id] = ((test_dists[layer_id] > self.thresholds[layer_id]).sum() / len(test_dists[layer_id]))
                 
-        return accuracy
+        return AUROC
+    
     
     @torch.no_grad()        
     def testset_correlation(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
@@ -462,6 +507,7 @@ class MeanDistSamplesDetector(nn.Module):
         
         self.valid_loader = valid_loader
         self.criterion = criterion
+        self.auroc = AUROC(task = 'binary')
         self.umap_generator = UMapGenerator(method=method,
                                             net_out=net_out)
         
@@ -488,10 +534,9 @@ class MeanDistSamplesDetector(nn.Module):
                     umap, net_out = self.forward(input_.to(self.device))
                 score = torch.norm(umap).cpu()
                 valid_dists.append(score)
-                    
-            self.threshold = 0
-            valid_dists = torch.tensor(valid_dists)
-            self.threshold = torch.sort(valid_dists)[0][len(valid_dists) - (len(valid_dists) // 20) - 1]
+                
+            self.valid_dists = torch.tensor(valid_dists)
+            self.valid_labels = torch.zeros(len(self.valid_dists), dtype=torch.uint8)
         
         test_dists = []
         for batch in test_loader:
@@ -514,11 +559,15 @@ class MeanDistSamplesDetector(nn.Module):
 
             score = torch.norm(umap).cpu()
             test_dists.append(score)
-            
-        test_dists = torch.tensor(test_dists).cpu()
-        accuracy = (test_dists > self.threshold).sum() / len(test_dists)
+        self.test_dists = torch.tensor(test_dists).cpu()
+        self.test_labels = torch.ones(len(self.test_dists), dtype=torch.uint8)
         
-        return accuracy    
+        self.pred =  torch.cat([self.valid_dists, self.test_dists]).squeeze()
+        self.target = torch.cat([self.valid_labels, self.test_labels]).squeeze()
+        print(self.pred.shape, self.target.shape)
+        AUROC = self.auroc(self.pred, self.target)
+        
+        return AUROC    
         
     
     @torch.no_grad()
@@ -589,14 +638,14 @@ class EntropyDetector(nn.Module):
         
         self.valid_loader = valid_loader
         self.criterion = criterion
+        self.auroc = AUROC(task = 'binary')
         self.umap_generator = UMapGenerator(method='probs',
                                             net_out=net_out)
         
         
     @torch.no_grad()
     def testset_ood_detection(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
-        
-        if not hasattr(self, 'threshold'):
+        if not hasattr(self, 'valid_dists'):
             valid_dists = []
             for batch in self.valid_loader:
                 input_ = batch['input'].to(0)
@@ -617,10 +666,9 @@ class EntropyDetector(nn.Module):
                     umap, net_out = self.forward(input_.to(self.device))
                 score = torch.norm(umap).cpu()
                 valid_dists.append(score)
-                    
-            self.threshold = 0
-            valid_dists = torch.tensor(valid_dists)
-            self.threshold = torch.sort(valid_dists)[0][len(valid_dists) - (len(valid_dists) // 20) - 1]
+                
+            self.valid_dists = torch.tensor(valid_dists)
+            self.valid_labels = torch.zeros(len(self.valid_dists), dtype=torch.uint8)
         
         test_dists = []
         for batch in test_loader:
@@ -643,11 +691,15 @@ class EntropyDetector(nn.Module):
 
             score = torch.norm(umap).cpu()
             test_dists.append(score)
-            
-        test_dists = torch.tensor(test_dists).cpu()
-        accuracy = (test_dists > self.threshold).sum() / len(test_dists)
+        self.test_dists = torch.tensor(test_dists).cpu()
+        self.test_labels = torch.ones(len(self.test_dists), dtype=torch.uint8)
         
-        return accuracy    
+        self.pred =  torch.cat([self.valid_dists, self.test_dists]).squeeze()
+        self.target = torch.cat([self.valid_labels, self.test_labels]).squeeze()
+        print(self.pred.shape, self.target.shape)
+        AUROC = self.auroc(self.pred, self.target)
+        
+        return AUROC     
         
     
     @torch.no_grad()
@@ -804,6 +856,7 @@ class EnsembleEntropyDetector(nn.Module):
         
         self.valid_loader = valid_loader
         self.criterion = criterion
+        self.auroc = AUROC(task = 'binary')
         self.umap_generator = UMapGenerator(method='probs',
                                             net_out=net_out)
         
@@ -811,19 +864,16 @@ class EnsembleEntropyDetector(nn.Module):
     @torch.no_grad()
     def testset_ood_detection(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
         
-        if not hasattr(self, 'threshold'):
+        if not hasattr(self, 'valid_dists'):
             valid_dists = []
             for batch in self.valid_loader:
                 input_ = batch['input'].to(0)
                 net_out = self.forward(input_.to(self.device))
                 umap = self.umap_generator(net_out)
-                scores = torch.sqrt((umap**2).sum(dim=(1,2))).cpu()
+                scores = (umap**2).mean(dim=(1,2)).cpu()
                 valid_dists.append(scores)
-            valid_dists = torch.stack(valid_dists, dim=0)
-            
-            self.thresholds = torch.sort(valid_dists)[0][len(valid_dists) - 
-                                                         (len(valid_dists) // 20) - 1,
-                                                         :].view(1, -1)
+            self.valid_dists = torch.stack(valid_dists, dim=0)
+            self.valid_labels = torch.zeros(len(self.valid_dists), dtype=torch.uint8)
             
         test_dists = []
         for batch in test_loader:
@@ -833,10 +883,22 @@ class EnsembleEntropyDetector(nn.Module):
             scores = torch.sqrt((umap**2).sum(dim=(1,2))).cpu()
             test_dists.append(scores)
             
-        test_dists = torch.stack(test_dists, dim=0).cpu()
-        accuracy = (test_dists > self.thresholds).sum(dim=0) / len(test_dists)
+        self.test_dists = torch.stack(test_dists, dim=0).cpu()
+        self.test_labels = torch.ones(len(self.test_dists), dtype=torch.uint8)
         
-        return accuracy       
+        
+        self.pred = torch.cat([self.valid_dists, self.test_dists], dim=0).T
+        self.target = torch.cat([self.valid_labels, self.test_labels])
+        
+        #print(ensemble_compositions[0], self.pred[ensemble_compositions[0]].mean(0).shape, self.target.shape)
+        
+        AUROC = [self.auroc(self.pred[self.ensemble_compositions[i]].mean(0), self.target) 
+                 for i in range(10)]
+        
+        return AUROC
+        #accuracy = (test_dists > self.thresholds).sum(dim=0) / len(test_dists)
+        
+        #return accuracy       
         
     
     @torch.no_grad()
