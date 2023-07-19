@@ -880,7 +880,7 @@ class EnsembleEntropyDetector(nn.Module):
             input_ = batch['input']
             net_out = self.forward(input_.to(self.device))
             umap = self.umap_generator(net_out)
-            scores = torch.sqrt((umap**2).sum(dim=(1,2))).cpu()
+            scores = (umap**2).mean(dim=(1,2)).cpu()
             test_dists.append(scores)
             
         self.test_dists = torch.stack(test_dists, dim=0).cpu()
