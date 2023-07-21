@@ -12,6 +12,9 @@ results-tmp
 # helper functions
 helper-tmp
 
+# everything related to Weights&Biases
+**/wandb/*
+
 ### - standard python gitignore provided by github
 
 # Bte-compiled / optimized / DLL files

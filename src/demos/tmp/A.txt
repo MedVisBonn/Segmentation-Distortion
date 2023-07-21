@@ -1,0 +1,91 @@
+    @torch.no_grad()
+    def testset_ood_detection(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
+        if not hasattr(self, 'threshold'):
+            valid_dists = []
+            for batch in self.valid_loader:
+                input_ = batch['input'].to(0)
+                
+                if self.net_out == 'calgary':
+                    net_out_volume = []
+                    umap_volume  = []
+
+                    for input_chunk in input_:
+                        umap, net_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                        net_out_volume.append(net_out.detach().cpu())
+                        umap_volume.append(umap)
+
+                    net_out = torch.cat(net_out_volume, dim=0)
+                    umap = torch.cat(umap_volume, dim=0)
+                    
+                if self.net_out == 'mms':
+                    umap, net_out = self.forward(input_.to(self.device))
+                score = torch.norm(umap).cpu()
+                valid_dists.append(score)
+                
+            self.valid_dists = torch.tensor(valid_dists)
+            self.valid_labels = torch.zeros(len(self.valid_dists), dtype=torch.uint8)
+        
+        test_dists = []
+        for batch in test_loader:
+            input_ = batch['input']
+
+            if self.net_out == 'calgary':
+                net_out_volume = []
+                umap_volume  = []
+
+                for input_chunk in input_:
+                    umap, net_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                    net_out_volume.append(net_out.detach().cpu())
+                    umap_volume.append(umap)
+
+                net_out = torch.cat(net_out_volume, dim=0)
+                umap = torch.cat(umap_volume, dim=0)
+
+            if self.net_out == 'mms':
+                umap, net_out = self.forward(input_.to(self.device))
+
+            score = torch.norm(umap).cpu()
+            test_dists.append(score)
+        self.test_dists = torch.tensor(test_dists).cpu()
+        self.test_labels = torch.ones(len(self.test_dists), dtype=torch.uint8)
+        
+        self.pred =  torch.cat([self.valid_dists, self.test_dists]).squeeze()
+        self.target = torch.cat([self.valid_labels, self.test_labels]).squeeze()
+        print(self.pred.shape, self.target.shape)
+        AUROC = self.auroc(self.pred, self.target)
+        
+        return AUROC     t == 'mms':
+                    umap, net_out = self.forward(input_.to(self.device))
+                score = torch.norm(umap).cpu()
+                valid_dists.append(score)
+                    
+            self.threshold = 0
+            valid_dists = torch.tensor(valid_dists)
+            self.threshold = torch.sort(valid_dists)[0][len(valid_dists) - (len(valid_dists) // 20) - 1]
+        
+        test_dists = []
+        for batch in test_loader:
+            input_ = batch['input']
+
+            if self.net_out == 'calgary':
+                net_out_volume = []
+                umap_volume  = []
+
+                for input_chunk in input_:
+                    umap, net_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                    net_out_volume.append(net_out.detach().cpu())
+                    umap_volume.append(umap)
+
+                net_out = torch.cat(net_out_volume, dim=0)
+                umap = torch.cat(umap_volume, dim=0)
+
+            if self.net_out == 'mms':
+                umap, net_out = self.forward(input_.to(self.device))
+
+            score = torch.norm(umap).cpu()
+            test_dists.append(score)
+            
+        test_dists = torch.tensor(test_dists).cpu()
+        accuracy = (test_dists > self.threshold).sum() / len(test_dists)
+        
+        return accuracy    
