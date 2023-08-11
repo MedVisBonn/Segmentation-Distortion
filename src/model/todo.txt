@@ -1,0 +1,11 @@
+[] Model for resDAE
+[] resDAE trainer adapt
+    Loss only uses CE in ouput layer
+        adapt loss func accordingly
+[] Umap generator
+    extent to CE
+
+
+[] Experiments
+    CE vs MSE in inference (report suggests its CE for pixel/mms)
+    

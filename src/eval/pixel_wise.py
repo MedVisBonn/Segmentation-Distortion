@@ -11,7 +11,7 @@ from utils import _activate_dropout, UMapGenerator, Thresholder, Metrics
 @torch.no_grad()
 def get_metrics_from_vaes(model: nn.Module, dataloader: DataLoader, 
                           net_out: str, n_samples: int = 10, n_taus: int = 1000,
-                          method='vae', device='cuda:0') -> Metrics:
+                          method='ae', device='cuda:0') -> Metrics:
     """
     Calculate, collect and post-process evaluation metrics for VAE-Based uncertainty estimation.
     
@@ -49,8 +49,15 @@ def get_metrics_from_vaes(model: nn.Module, dataloader: DataLoader,
 
         elif net_out == 'mms':
             segmap = torch.argmax(output[:1], dim=1, keepdims=True)
-            errmap = (torch.argmax(gt, dim=1, keepdims=True) != segmap).float()
+            #print(segmap.shape, gt.shape)
+            errmap = (gt != segmap).float()
+            #print(segmap.shape, gt.shape)
+            #errmap = (torch.argmax(gt, dim=1, keepdims=True) != segmap).float()
+            #print(errmap.shape, gen_umap(output).shape)
         
+        #print('out', output.shape)
+        #print('umap', gen_umap(output).shape)
+        #print('err', errmap.sum())
         umaps.append(gen_umap(output).cpu())
         errmaps.append(errmap.cpu())
         
@@ -62,6 +69,75 @@ def get_metrics_from_vaes(model: nn.Module, dataloader: DataLoader,
         binary_umaps = thresholder(umap)
         metrics.update(binary_umaps, 
                        errmap)
+        #print(binary_umaps.shape)
+
+    metrics.scale(len_)
+    metrics.summary_stats()
+
+    return metrics
+
+
+
+@torch.no_grad()
+def get_metrics_from_probs(model: nn.Module, dataloader: DataLoader, 
+                           net_out: str, n_taus: int = 1000,
+                           device='cuda:0') -> Metrics:
+    """
+    Calculate, collect and post-process evaluation metrics for Entropy-Based uncertainty estimation.
+    
+    From a pre-trained model and a test loader for the calgary data, generate umaps by calculating the
+    entropy directly from the model output, threshold them at different evenly spaced values and aggregate
+    in a Metrics object for post-processing and logging.
+    """
+    
+    model.to(device)
+    model.eval()
+        
+    len_        = dataloader.dataset.__len__()
+    gen_umap    = UMapGenerator(method='entropy', net_out=net_out).to(device)
+    metrics     = Metrics(n_taus)
+    
+    umaps       = []
+    errmaps     = []
+    
+    
+    for _, batch in enumerate(dataloader):
+
+        input_ = batch['input'].to(device)
+        gt     = batch['target'].to(device)
+        gt[gt == -1] = 0
+        # put model in eval mode to get reference segmentation w/o dropout
+        model.eval()
+        output = model(input_)
+
+        if net_out == 'calgary':
+            segmap = (torch.sigmoid(output) > 0.5) * 1
+            errmap = (gt != segmap).float()
+            
+        if net_out == 'mms':
+            segmap = torch.argmax(output.mean(0, keepdim=True), dim=1, keepdims=True)
+            #errmap = (torch.argmax(gt, dim=1, keepdims=True) != segmap).float()
+            errmap = (gt != segmap).float()
+            
+            
+        #print('out', output.shape)
+        umap = gen_umap(output).cpu()
+        #print('umap', umap.shape)
+        umaps.append(umap)
+        errmaps.append(errmap.cpu())
+        #print('err', errmap.sum())
+        
+    umap_values = torch.cat(umaps).flatten()
+    taus        = np.quantile(umap_values, torch.linspace(0, 1, n_taus)**(1/8))
+    thresholder = Thresholder(torch.from_numpy(taus).view(1, n_taus, 1, 1))   
+    
+    for umap, errmap in zip(umaps, errmaps):
+        binary_umaps = thresholder(umap)
+        
+        #print(binary_umaps.shape, errmap.shape)
+        
+        metrics.update(binary_umaps, 
+                       errmap)    
 
     metrics.scale(len_)
     metrics.summary_stats()
@@ -135,60 +211,3 @@ def get_metrics_from_dropout(model: nn.Module, dataloader: DataLoader,
     return metrics
 
 
-@torch.no_grad()
-def get_metrics_from_probs(model: nn.Module, dataloader: DataLoader, 
-                           net_out: str, n_taus: int = 1000,
-                           device='cuda:0') -> Metrics:
-    """
-    Calculate, collect and post-process evaluation metrics for Entropy-Based uncertainty estimation.
-    
-    From a pre-trained model and a test loader for the calgary data, generate umaps by calculating the
-    entropy directly from the model output, threshold them at different evenly spaced values and aggregate
-    in a Metrics object for post-processing and logging.
-    """
-    
-    model.to(device)
-    model.eval()
-        
-    len_        = dataloader.dataset.__len__()
-    gen_umap    = UMapGenerator(method='probs', net_out=net_out).to(device)
-    metrics     = Metrics(n_taus)
-    
-    umaps       = []
-    errmaps     = []
-    
-    
-    for _, batch in enumerate(dataloader):
-
-        input_ = batch['input'].to(device)
-        gt     = batch['target'].to(device)
-        gt[gt == -1] = 0
-        # put model in eval mode to get reference segmentation w/o dropout
-        model.eval()
-        output = model(input_)
-
-        if net_out == 'calgary':
-            segmap = (torch.sigmoid(output) > 0.5) * 1
-            errmap = (gt != segmap).float()
-            
-        if net_out == 'mms':
-            segmap = torch.argmax(output, dim=1, keepdims=True)
-            errmap = (torch.argmax(gt, dim=1, keepdims=True) != segmap).float()
-        
-        umap = gen_umap(output).cpu()
-        umaps.append(umap)
-        errmaps.append(errmap.cpu())
-        
-    umap_values = torch.cat(umaps).flatten()
-    taus        = np.quantile(umap_values, torch.linspace(0, 1, n_taus)**(1/8))
-    thresholder = Thresholder(torch.from_numpy(taus).view(1, n_taus, 1, 1))   
-    
-    for umap, errmap in zip(umaps, errmaps):
-        binary_umaps = thresholder(umap)
-        metrics.update(binary_umaps, 
-                       errmap)    
-
-    metrics.scale(len_)
-    metrics.summary_stats()
-
-    return metrics

@@ -17,7 +17,7 @@ import collections
 from nnunet.training.network_training.nnUNetTrainerV2 import nnUNetTrainerV2
 sys.path.append('../')
 from utils import EarlyStopping, epoch_average, slice_selection, dataset_from_indices, volume_collate
-from model.UNet2D20 import UNet2D
+from model.unet import UNet2D
 from losses import SampleDice, UnetDice, DiceScoreMMS, CrossEntropyTargetArgmax
 from trainer.unet_trainer import UNetTrainerACDC
 

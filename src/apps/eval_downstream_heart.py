@@ -12,6 +12,7 @@ sys.path.append('../')
 from dataset import ACDCDataset, MNMDataset
 from model.unet import UNet2D
 from model.ae import AE
+from model.dae import resDAE
 from model.wrapper import Frankenstein
 from losses import DiceScoreMMS
 from utils import  epoch_average
@@ -82,23 +83,37 @@ def main():
     
     # - instantiate transformations
     layer_ids = ['shortcut0', 'shortcut1', 'shortcut2', 'up3']
-    disabled_ids = ['shortcut0', 'shortcut1', 'shortcut2']
+    #disabled_ids = ['shortcut0', 'shortcut1', 'shortcut2']
+    disabled_ids = []
+#                        #    channel, spatial, latent,  depth, block 
+#     ae_map   = {'up3': [        64,      32,    128,     2,      4]}
 
+
+#     AEs = nn.ModuleDict({'up3': AE(in_channels = ae_map['up3'][0], 
+#                                         in_dim      = ae_map['up3'][1],
+#                                         latent_dim  = ae_map['up3'][2],
+#                                         depth       = ae_map['up3'][3],
+#                                         block_size  = ae_map['up3'][4])})
                        #    channel, spatial, latent,  depth, block 
-    ae_map   = {'up3': [        64,      32,    128,     2,      4]}
 
+    dae_map   = {
+         'shortcut0': [         8,     256,    128,     6,      1],
+         'shortcut1': [        16,     128,    128,     5,      1],
+         'shortcut2': [        32,      64,    128,     4,      1],
+         'up3':       [        64,      32,    128,     3,      1]}
 
-    AEs = nn.ModuleDict({'up3': AE(in_channels = ae_map['up3'][0], 
-                                        in_dim      = ae_map['up3'][1],
-                                        latent_dim  = ae_map['up3'][2],
-                                        depth       = ae_map['up3'][3],
-                                        block_size  = ae_map['up3'][4])})
+    DAEs = nn.ModuleDict({key: resDAE(in_channels = dae_map[key][0], 
+                                      in_dim      = dae_map[key][1],
+                                      latent_dim  = dae_map[key][2],
+                                      depth       = dae_map[key][3],
+                                      block_size  = dae_map[key][4],
+                                      w_prior     = 1) for key in dae_map})
 
     for layer_id in disabled_ids:
-         AEs[layer_id] = nn.Identity()
+         DAEs[layer_id] = nn.Identity()
 
     model = Frankenstein(unet, 
-                         AEs, 
+                         DAEs, 
                          disabled_ids=disabled_ids,
                          copy=True)
     model.cuda()
@@ -117,7 +132,8 @@ def main():
         root = '../../'
         # - load params
         ae_path = f'acdc_ae{i}'
-        model_path = f'{root}pre-trained-tmp/trained_AEs/{ae_path}_best.pt'
+        #model_path = f'{root}pre-trained-tmp/trained_AEs/{ae_path}_best.pt'
+        model_path = f'{root}pre-trained-tmp/trained_AEs/acdc_resDAE{i}_multi_CEMSE_1prior_best.pt'
         state_dict = torch.load(model_path)['model_state_dict']
         model.load_state_dict(state_dict)
         # hook transformations such that the model output does only contain
@@ -131,7 +147,7 @@ def main():
             dice = test_set(model, loader[key], eval_metrics)
             results[key].append(dice['Volumetric Dice'].item())
             
-        np.save('../../results-tmp/heart_downstream_results.npy', results)
+        np.save('../../results-tmp/heart_downstream_results_resDAE.npy', results)
             
             
 if __name__ == '__main__':    

@@ -374,6 +374,7 @@ class AETrainerACDC:
             
         average_loss = epoch_average(loss_list, batch_sizes)
         metrics      = average_metrics(metric_list, batch_sizes)
+#         print(metrics['output_diff'])
         
         self.history['train loss'].append(average_loss)
         self.history['train metrics'].append(metrics)
@@ -419,9 +420,13 @@ class AETrainerACDC:
             if self.eval_metrics is not None:
                 for key, metric in self.eval_metrics.items():
                     epoch_metrics[key].append(metric(unet_out, samples, target).mean().detach().cpu())
-                    
+        
+#         print("hi")
+#         print(batch_sizes)
+#         print("eval before avrg", metrics['output_diff'], batch_sizes)       
         average_loss = epoch_average(loss_list, batch_sizes)
         metrics      = average_metrics(metric_list, batch_sizes)
+#         print("eval after avrg", metrics['output_diff'])
         self.history['valid loss'].append(average_loss)
         self.history['valid metrics'].append(metrics)
         if self.eval_metrics is not None:

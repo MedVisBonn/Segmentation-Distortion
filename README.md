@@ -2,13 +2,13 @@
 
 
 # Segmentation Distortion
-Here you will soon find the step-by-step instructions to work with
+Here you will soon find the step-by-step instructions to install and work with the methodology presented in our paper.
 
-<!--structure_begin-->
 ## Installation
 
 The directory tree inside the repository should look like this:  
 
+<!--structure_begin-->
 ```bash
 .
 ├── data
@@ -23,7 +23,7 @@ The directory tree inside the repository should look like this:
     └── trainer
 ```
 
-
+<!--structure_end-->
 
 ## Usage
 
@@ -32,12 +32,12 @@ The directory tree inside the repository should look like this:
 ## License
 
 ## Citation
-<!--structure_end-->
+
 ## Contact
 
 For any questions or clarifications, feel free to reach out:
 
-- Email: lennartz@cs.uni-bonn.de
+- Email: lennartz (ät) cs.uni-bonn.de
 
 Please allow a couple of days for a response.
 

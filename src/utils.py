@@ -164,7 +164,7 @@ class UMapGenerator(nn.Module):
     
     def __init__(
         self,
-        method  = 'vae',
+        method  = 'ae',
         net_out = 'mms'
     ):
         super().__init__()
@@ -178,15 +178,41 @@ class UMapGenerator(nn.Module):
         
         x = x.detach()
         
-        if self.method == 'vae':
+        #################################
+        ### experimental / M&M only   ###
+        #################################
         
-            if self.net_out == 'mms':
-                
-                
-                
+        if self.method == 'cross_entropy':
+            umap = self.ce(x[:1], self.m(x[1:]))
+            umap = umap.mean(dim=0, keepdims=True)
+            
+        elif self.method == 'entropy':          
+            x_prob = self.m(x[:1])
+            umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy()
+
+            
+        elif self.method == 'kl_divergence':
+            x_in = F.log_softmax(x[:1], dim=1)
+            umap = self.kl(x_in, self.m(x[1:]))
+            umap = umap.sum(dim=(0,1), keepdims=True)
+            
+        elif self.method == 'mse':
+            x      = self.m(x)
+            x     -= x.min(dim=1, keepdims=True).values
+            x     /= x.sum(dim=1, keepdims=True)
+            umap   = torch.pow(x[:1] - x[1:], 2).mean(0, keepdim=True)
+            umap   = umap.mean(dim=1, keepdims=True)            
+            
+        #################################
+        ###   old umaps from MICCAI   ###
+        #################################
+        
+        if self.method == 'ae':
+            if self.net_out == 'mms':                
                 umap = self.ce(x[:1], self.m(x[1:]))
-                umap = umap.mean(dim=(0, 1), keepdims=True)
-                
+                #umap = umap.mean(dim=(0, 1), keepdims=True)
+                #print(umap.shape)
+                umap = umap.mean(dim=0, keepdims=True)
 #                 x      = self.m(x)
 #                 x     -= x.min(dim=1, keepdims=True).values
 #                 x     /= x.sum(dim=1, keepdims=True)
@@ -200,10 +226,18 @@ class UMapGenerator(nn.Module):
         elif self.method == 'entropy':          
 
             if self.net_out == 'mms':
-                x_argmax  = torch.argmax(x, dim=1)
-                x_one_hot = F.one_hot(x_argmax, num_classes=4).permute(0,3,1,2).float()
-                x_mean    = x_one_hot.mean(dim=0, keepdims=True)
+                #print('x', x.shape)
+                #x_argmax  = torch.argmax(x, dim=1)
+                #print('2',x_argmax.shape)
+                #x_one_hot = F.one_hot(x_argmax, num_classes=4).permute(0,3,1,2).float()
+                #print('3',x_one_hot.shape)
+                x_softmax = F.softmax(x, dim=1)
+                #print('soft',x_softmax.shape)
+                #x_mean    = x_one_hot.mean(dim=0, keepdims=True)
+                x_mean    = x_softmax.mean(dim=0, keepdims=True)
+                #print('4',x_mean.shape)
                 umap = torch.distributions.Categorical(x_mean.permute(0,2,3,1)).entropy()
+                #print('5',umap.shape)
                 #umap      = - x_mean * torch.log(x_mean)
                 #umap      = umap.sum(dim=1, keepdims=True)
 
@@ -224,7 +258,8 @@ class UMapGenerator(nn.Module):
                 #print(x_probs.min(), x_probs.max())
                 #umap = torch.distributions.Categorical(x_probs.permute(0,2,3,1)).entropy()
                 umap    = - x_probs * torch.log(x_probs+1e-6) - (1-x_probs) * torch.log(1-x_probs+1e-6)
-                
+        
+        #print(umap.shape)
         return umap
     
     

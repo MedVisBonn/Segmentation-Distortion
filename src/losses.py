@@ -202,13 +202,10 @@ class UnetSurfaceDice(nn.Module):
     
     
 class CalgaryCriterionAE(nn.Module):
-    def __init__(self, diff=True, loss='huber'):
+    def __init__(self, recon=True, diff=True, loss='huber'):
         super().__init__()
-        #self.bce   = nn.BCELoss()
         self.diff  = diff
-        #self.mse   = nn.MSELoss()
-        #self.loss  = nn.HuberLoss()
-        
+        self.recon = recon
         self.id_loss = loss
         if loss == 'huber':
             self.loss = nn.HuberLoss()
@@ -217,26 +214,62 @@ class CalgaryCriterionAE(nn.Module):
         
     def forward(self, unet_out, samples, train_data):
         
-        #preds = torch.sigmoid(samples)
-        #with torch.no_grad():
-        #    target = torch.sigmoid(unet_out.detach())    
-        #loss = self.bce(preds, target)
-        
-        
-        loss = self.loss(samples, unet_out)
-        metrics = {'output_mse': loss.item()}
-        if not self.diff:
-            loss *= 0
-        
-        for layer in train_data:
-            metrics[layer] = {}
+        if self.diff:
+            loss = self.loss(samples, unet_out)
+            metrics = {'output_loss': loss.item()}
+        else:
+            loss = 0
+            metrics={}
             
-            mse = train_data[layer]['mse']
+        if self.recon:
+            mse = 0
+            for layer in train_data:
+                metrics[layer] = {}
+                mse_layer = train_data[layer]['mse']
+                mse += mse_layer
+                metrics[layer]['mse'] = mse_layer.item()
             loss += mse
-            metrics[layer]['mse'] = mse.item()
             
         return loss, metrics
     
+    
+class MNMCriterionAE(nn.Module):
+    def __init__(self, recon=True, diff=True, loss='huber'):
+        super().__init__()
+        self.ce    = nn.CrossEntropyLoss()
+        self.diff  = diff
+        self.recon = recon
+        self.id_loss = loss
+        if loss == 'huber':
+            self.loss = nn.HuberLoss()
+        elif loss == 'ce':
+            self.loss = CrossEntropyTargetArgmax()
+        self.m = nn.Softmax(dim=1)
+        
+    def forward(self, unet_out, samples, train_data):
+        
+        if self.diff:
+            #print("Diff: yse")
+            #print(samples.shape, samples.min(), samples.max(), unet_out.shape, unet_out.min(), unet_out.max())
+            loss = self.loss(samples, unet_out)
+            metrics = {'output_diff': loss.item()}
+            #print(loss.item())
+        else:
+            loss=0
+            metrics={}
+        
+        
+        #print("Recon: yes")
+        mse = 0
+        for layer in train_data:
+            metrics[layer] = {}
+            mse_layer = train_data[layer]['mse']
+            mse += mse_layer
+            metrics[layer]['mse'] = mse_layer.item()
+        if self.recon:
+            loss += mse
+            
+        return loss, metrics    
     
     
 class MNMCriterion(nn.Module):
@@ -286,52 +319,7 @@ class MNMCriterion(nn.Module):
             
         return loss, metrics
     
-    
-    
-class MNMCriterionAE(nn.Module):
-    def __init__(self, diff=True, loss='huber'):
-        super().__init__()
-        self.ce    = nn.CrossEntropyLoss()
-        self.diff  = diff
-        self.id_loss = loss
-        if loss == 'huber':
-            self.loss = nn.HuberLoss()
-        elif loss == 'ce':
-            self.loss = CrossEntropyTargetArgmax()
-        # self.ce    = nn.CrossEntropyLoss()
-        self.m = nn.Softmax(dim=1)
-        
-    def forward(self, unet_out, samples, train_data):
-        
-        #samples_pred = m(samples)
-        #with torch.no_grad():
-        #    unet_out_target = self.m(unet_out)
-            
-        #assert samples.shape == unet_out_target.shape, "input and output differ in shape!"
-        
-        loss = self.loss(samples, unet_out)
-        #print('output:', loss.item())
-        # loss = self.huber(samples, unet_out)
-        #loss = self.ce(samples, unet_out_target)
-        metrics = {'output_diff': loss.item()}
-        if not self.diff:
-            loss *= 0
-        
-        for layer in train_data:
-            metrics[layer] = {}
-            mse = train_data[layer]['mse']
-            loss += mse# * 100
-            #print("mse:", mse.item())
-            #kl    = train_data[layer]['kl']
-            #print('kl:', (beta[layer] * kl).item())
-            #loss += mse + beta[layer] * kl
-            
-            metrics[layer]['mse'] = mse.item()
-            #metrics[layer]['kl']  = kl.item()
-            #metrics[layer]['mu']  = train_data[layer]['mu'].detach().mean().item()
-            #metrics[layer]['var'] = torch.exp(train_data[layer]['log_var']).detach().mean().item()
-            
-        return loss, metrics
+
     
     
     

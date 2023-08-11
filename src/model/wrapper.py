@@ -51,6 +51,19 @@ class Frankenstein(nn.Module):
             self.transformation_handles[layer_id] = layer.register_forward_pre_hook(
                 hook
             )
+            
+    def hook_inspect_transformation(
+        self, 
+        transformations: Dict[str, nn.Module], 
+        n_samples: int,
+        arch: str = 'ae'
+    ) -> None:
+        for layer_id in transformations:
+            if layer_id not in self.disabled_ids:
+                layer = self.seg_model.get_submodule(layer_id)
+                hook  = self._get_inspect_transformation_hook(transformations[layer_id], layer_id, n_samples, arch)
+                self.inspect_transformation_handles[layer_id] = layer.register_forward_pre_hook(hook)
+            
 
     def _get_train_transformation_hook(
         self, transformation: nn.Module, layer_id: str
@@ -87,12 +100,56 @@ class Frankenstein(nn.Module):
                 return torch.cat([x_in, x_in_new], dim=0)
 
         return hook
+            
+    def _get_inspect_transformation_hook(
+            self, 
+            transformation: nn.Module, 
+            layer_id: str, 
+            n_samples: int,
+            arch: str = 'ae',
+        ) -> Callable:
+        
+        @torch.no_grad()
+        def hook(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
+            x_in, *_ = x  # weird tuple, can use x_in = x[0]
+            if n_samples == 0:
+                return x
+            elif n_samples == -1:
+                mu, log_var, x_in_new = transformation(x_in)
+            else:
+                x_in_new = x_in.unsqueeze(1).repeat(1, n_samples, 1, 1, 1).flatten(0, 1)
+                if arch == 'ae':
+                    x_in_new = transformation(x_in_new)
+                elif arch == 'res_ae':
+                    x_in_new, prior, residual = transformation(x_in_new)
+                x_in_new = torch.cat([x_in, x_in_new], dim=0)
+                
+            if layer_id not in self.disabled_ids:
+                training_data = {
+                    'input'  : x_in_new[ :1],
+                    'recon'  : x_in_new[1: ],
+                }
+                
+                if arch == 'res_ae':
+                    training_data['prior'] = prior
+                    training_data['residual'] = residual
+                
+                self.inspect_data[layer_id] = training_data
+            
+            return x_in_new
+        
+        return hook
+   
+    
 
     def remove_train_transformation_hook(self, layer_id: str) -> None:
         self.train_transformation_handles[layer_id].remove()
 
     def remove_transformation_hook(self, layer_id: str) -> None:
         self.transformation_handles[layer_id].remove()
+        
+    def remove_inspect_transformation_hook(self, layer_id: str) -> None:
+        self.inspect_transformation_handles[layer_id].remove()
 
     def remove_all_hooks(self):
         if hasattr(self, "train_transformation_handles"):
@@ -104,6 +161,12 @@ class Frankenstein(nn.Module):
             for handle in self.transformation_handles:
                 self.transformation_handles[handle].remove()
             self.transformation_handles = {}
+            
+        if hasattr(self, 'inspect_transformation_handles'):
+            for handle in self.inspect_transformation_handles:
+                self.inspect_transformation_handles[handle].remove()
+            self.inspect_transformation_handles = {}
+        
 
     def freeze_seg_model(self):
         self.seg_model.eval()
