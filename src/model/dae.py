@@ -48,3 +48,43 @@ class resDAE(nn.Module):
                 return x + res
         else:
             return x
+
+        
+class AugResDAE(nn.Module):
+    """ Residual Denoising Autoencoder (resDAE) for denoising feature maps.
+    """
+    def __init__(
+        self, 
+        in_channels, 
+        in_dim, 
+        latent_dim=128, 
+        depth=3, 
+        latent='dense', 
+        block_size=1,
+    ):
+        super().__init__()
+        self.on = True
+        self.ae = AE(
+            in_channels, 
+            in_dim, 
+            latent_dim=latent_dim, 
+            depth=depth, 
+            latent=latent, 
+            block_size=block_size
+        )
+        
+
+    def turn_off(self) -> None:
+        self.on = False
+    
+
+    def turn_on(self) -> None:
+        self.on = True
+    
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.on:
+            res = self.ae(x)
+            return x + res
+        else:
+            return x

@@ -13,7 +13,7 @@ sys.path.append('..')
 from dataset import CalgaryCampinasDataset, ACDCDataset, MNMDataset
 from model.unet import UNet2D, UNetEnsemble
 from model.ae import AE
-from model.dae import resDAE
+from model.dae import resDAE, AugResDAE
 from model.wrapper import Frankenstein
 from losses import DiceScoreCalgary, DiceScoreMMS, SurfaceDiceCalgary
 from utils import volume_collate
@@ -263,11 +263,11 @@ def main(args):
                 
     if method == 'single':
         disabled_ids = ['shortcut0', 'shortcut1', 'shortcut2']
-        DAEs = nn.ModuleDict({'up3': resDAE(in_channels = 64, 
+        DAEs = nn.ModuleDict({'up3': AugResDAE(in_channels = 64, 
                                             in_dim      = 32,
-                                            latent_dim  = 128 if net_out=='mms' else 64,
+                                            latent_dim  = 256 if net_out=='mms' else 64,
                                             depth       = 3,
-                                            block_size  = 1)})
+                                            block_size  = 4)})
         
         
         for layer_id in disabled_ids:
@@ -280,8 +280,8 @@ def main(args):
                                  transformations=DAEs,
                                  disabled_ids=disabled_ids,
                                  copy=True)
-            
-            model_path = f'{ROOT}pre-trained-tmp/trained_AEs/{pre}_resDAE{i}_{post}_best.pt'
+            model_path = f'{ROOT}pre-trained-tmp/trained_AEs/acdc_AugResDAE{i}_{post}_best.pt'
+            #model_path = f'{ROOT}pre-trained-tmp/trained_AEs/{pre}_resDAE{i}_{post}_best.pt'
             #model_path = f'{ROOT}pre-trained-tmp/trained_AEs/acdc_epinet_CE-only_prior-1_best.pt'
             #model_path = f'{ROOT}pre-trained-tmp/trained_AEs/acdc_resDAE0_venus_best.pt'
             state_dict = torch.load(model_path)['model_state_dict']

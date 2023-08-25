@@ -83,6 +83,7 @@ class Frankenstein(nn.Module):
             return x_in_new
 
         return hook
+    
 
     def _get_transformation_hook(
         self, transformation: nn.Module, n_samples: int = 1
@@ -101,6 +102,7 @@ class Frankenstein(nn.Module):
 
         return hook
             
+        
     def _get_inspect_transformation_hook(
             self, 
             transformation: nn.Module, 

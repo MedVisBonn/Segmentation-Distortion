@@ -143,11 +143,11 @@ class AE(nn.Module):
 
         if self.on:
             x = self.encoder(x)
-            x = self.intermediate_conv(x)
-            z = self.latent(x)
+            z = self.intermediate_conv(x)
+            z = self.latent(z)
             z = self.spatial(z)
             z = self.intermediate_conv_reverse(z)
-            z = self.decoder(z)
+            z = self.decoder(x + z)
             z = self.tmp(z)
             return z
 

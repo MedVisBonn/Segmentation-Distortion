@@ -1,5 +1,8 @@
 ### - local folders
 
+# Swap files
+*.swp
+
 # data sets
 data
 
