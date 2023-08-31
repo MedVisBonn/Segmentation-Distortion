@@ -4,26 +4,30 @@
 # Segmentation Distortion
 Here you will soon find the step-by-step instructions to install and work with the methodology presented in our paper.
 
-## Installation
+## Setup
 
-The directory tree inside the repository should look like this:  
-
-<!--structure_begin-->
+### Git
+If you want to test the code on your examples, simply clone the repository like this:
 ```bash
-.
-├── data
-├── pre-trained
-├── results
-└── src
-    ├── apps
-    ├── configs
-    ├── demos
-    ├── eval
-    ├── model
-    └── trainer
+git clone git@github.com:MedVisBonn/Segmentation-Distortion.git
 ```
-
-<!--structure_end-->
+### Docker
+The easiest way to replicate the results of the paper is via docker. You can find the necessary resources in the docker directory.  
+Build your own image:
+The dockerfile itself should work as it is. Modify the -t option in build.sh to match your target directory and run
+```bash 
+bash build.sh
+```
+Alternatively, you can download a pre-build image from docker-hub:
+```bash
+TODO
+```
+Once the image is ready, modify the run.sh to mount datasets and run
+```bash
+bash run.sh
+```
+  
+## RE
 
 ## Usage
 
