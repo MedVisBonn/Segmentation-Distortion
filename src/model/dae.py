@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor, nn
-from model.ae import AE 
+from model.ae import AE, ChannelAE
 
 
 class resDAE(nn.Module):
@@ -64,13 +64,14 @@ class AugResDAE(nn.Module):
     ):
         super().__init__()
         self.on = True
-        self.ae = AE(
+        self.ae = ChannelAE(
             in_channels, 
             in_dim, 
-            latent_dim=latent_dim, 
+#            latent_dim=latent_dim, 
             depth=depth, 
-            latent=latent, 
-            block_size=block_size
+#            latent=latent, 
+            block_size=block_size,
+            residual=True
         )
         
 

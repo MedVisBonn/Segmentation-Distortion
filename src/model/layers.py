@@ -48,7 +48,7 @@ class ConvBlock(nn.Module):
                                     padding=padding,
                                 ),
                                 nn.LayerNorm(
-                                    torch.Size([in_channels, in_dim * 2, in_dim * 2])
+                                    torch.Size([in_channels, in_dim, in_dim])
                                 ),
                                 nn.LeakyReLU(),
                             ]

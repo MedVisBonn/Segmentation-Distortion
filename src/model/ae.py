@@ -6,7 +6,8 @@ from typing import Iterable, Dict, Callable, Tuple, Union
 
 from model.layers import ConvBlock, ReshapeLayer
 
-
+    
+    
 class AE(nn.Module):
     """Autoencoder (AE) class to transform U-Net feature maps.
 
@@ -153,3 +154,130 @@ class AE(nn.Module):
 
         else:
             return x
+
+        
+class ChannelAE(nn.Module):
+    """Autoencoder (AE) class to transform U-Net feature maps.
+
+    Module that dynamically builds an AE. It expects a certain
+    input shape (due to the fc layer). It uses conv blocks
+    (see layers.py) and supports different depths, block sizes
+    and latent dimensions. Currently, it only supports a dense
+    bottleneck.
+    """
+    
+    def __init__(
+        self,
+        in_channels: int,
+        in_dim: int,
+        depth: int = 3,
+        block_size: int = 1,
+        residual: bool = False
+    ):
+        super().__init__()
+        self.on = True
+        self.in_channels = in_channels
+        self.in_dim = in_dim
+        self.depth = depth
+        self.block_size = block_size
+        self.residual = residual
+        
+        
+        self.init = ConvBlock(
+            in_channels=self.in_channels,
+            out_channels=self.in_channels,
+            in_dim=self.in_dim,
+            block_size=self.block_size,
+            residual=self.residual,
+            kernel_size=3,
+            stride=1,
+            padding=1,)
+        self.encoder = self._build_encoder()
+        self.decoder = self._build_decoder()
+        self.out     = nn.Conv2d(in_channels, in_channels, 1)
+        
+        
+        
+#     def _build_encoder(self):
+#         encoder_list = nn.ModuleList(
+#             ConvBlock(
+#                 in_channels=self.in_channels // 4**i,
+#                 out_channels=self.in_channels // 4**(i+1),
+#                 in_dim=self.in_dim,
+#                 block_size=self.block_size,
+#                 residual=self.residual,
+#                 kernel_size=3,
+#                 stride=1,
+#                 padding=1,
+#             ) for i in range(self.depth)
+#         )
+#         return encoder_list 
+
+    
+#     def _build_decoder(self):
+#         decoder_list = nn.ModuleList(
+#             ConvBlock(
+#                 in_channels=self.in_channels // 4**(i+1),
+#                 out_channels=self.in_channels // 4**i,
+#                 in_dim=self.in_dim,
+#                 block_size=self.block_size,
+#                 residual=self.residual,
+#                 kernel_size=3,
+#                 stride=1,
+#                 padding=1,
+#             ) for i in reversed(range(self.depth))
+#         )
+#         return decoder_list
+    
+    
+    def _build_encoder(self):
+        encoder_list = nn.ModuleList(
+            ConvBlock(
+                in_channels=self.in_channels,
+                out_channels=self.in_channels,
+                in_dim=self.in_dim,
+                block_size=self.block_size,
+                residual=self.residual,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ) for i in range(self.depth)
+        )
+        return encoder_list 
+
+    
+    def _build_decoder(self):
+        decoder_list = nn.ModuleList(
+            ConvBlock(
+                in_channels=self.in_channels,
+                out_channels=self.in_channels,
+                in_dim=self.in_dim,
+                block_size=self.block_size,
+                residual=self.residual,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ) for i in reversed(range(self.depth))
+        )
+        return decoder_list
+    
+    
+    def forward(self, x):
+        encoder_outputs = []
+        
+        # Encoding
+        x = self.init(x)
+        encoder_outputs.append(x)
+        for enc_layer in self.encoder:
+            x = enc_layer(x)
+            encoder_outputs.append(x)
+
+        # Decoding
+        for i, dec_layer in enumerate(self.decoder):
+            if i > 0:
+                x = dec_layer(x) + encoder_outputs[-(i + 2)]  # Skip connection
+            else:
+                x = dec_layer(x) # no skip connection if bottleneck
+        # Output layer
+        x = self.out(x)
+        return x
