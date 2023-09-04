@@ -4,7 +4,7 @@ docker build \
 	--pull \
 	--progress=plain \
 	--ssh default \
-	-t segmentation-distortion \
+	-t segmentation-distortion/replicate:1.0 \
 	-f Dockerfile .
 
 
