@@ -37,11 +37,12 @@ To explore the project, you can run a jupyter lab server on the port specified i
 jupyter lab --no-browser --allow-root --port 8888
 ```
 ## License
+This work is licensed under the GNU General Public License v3
 
 ## Citation
 TBA
-## Contact
 
+## Contact
 For any questions or clarifications, feel free to reach out
 
 lennartz (ät) cs.uni-bonn.de
