@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 
 from torchvision.transforms import functional as F, InterpolationMode
-
+from batchgenerators.dataloading.data_loader import SlimDataLoaderBase
 
 def _apply_op(
     img: Tensor,
@@ -227,3 +227,75 @@ class RandAugmentWithLabels(torch.nn.Module):
             f")"
         )
         return s
+
+    
+
+class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
+    """Single image multi view dataloader.
+    
+    Adapted from batchgenerator examples:
+    https://github.com/MIC-DKFZ/batchgenerators/blob/master/batchgenerators/examples/example_ipynb.ipynb
+    """
+    def __init__(
+        self, 
+        data: ACDCDataset, 
+        batch_size: int = 2, 
+        return_orig: str = True
+    ):
+        super(SingleImageMultiViewDataLoader, self).__init__(data, batch_size)
+        # data is now stored in self._data.
+        self.return_orig = return_orig
+    
+    def generate_train_batch(self):
+        
+        data = self._data[randrange(len(self._data))]
+        img = data['input'].numpy().astype(np.float32)
+        tar = data['target'][0].numpy().astype(np.float32)
+        
+        img_batched = np.tile(img, (self.batch_size, 1, 1, 1))
+        tar_batched = np.tile(tar, (self.batch_size, 1, 1, 1))
+        # now construct the dictionary and return it. np.float32 cast because most networks take float
+        out = {'data': img_batched, 
+               'seg':  tar_batched}
+        
+        # if the original data is also needed, activate this flag to store it where augmentations
+        # cant find it.
+        if self.return_orig:
+            out['data_orig']   = data['input'].unsqueeze(0)
+            out['target_orig'] = data['target'].unsqueeze(0)
+        
+        return out
+    
+    
+class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
+    """Multi image single view dataloader.
+    
+    Adapted from batchgenerator examples:
+    https://github.com/MIC-DKFZ/batchgenerators/blob/master/batchgenerators/examples/example_ipynb.ipynb
+    """
+    def __init__(
+        self, 
+        data: ACDCDataset, 
+        batch_size: int = 2, 
+        return_orig: str = True
+    ):
+        super(MultiImageSingleViewDataLoader, self).__init__(data, batch_size)
+        # data is now stored in self._data.
+        self.return_orig = return_orig
+    
+    def generate_train_batch(self):
+        sample = torch.randint(0, len(self._data), size=(self.batch_size,))
+        data   = self._data[sample]
+        img    = data['input']
+        tar    = data['target']
+        #construct the dictionary and return it. np.float32 cast because most networks take float
+        out = {'data': img.numpy().astype(np.float32), 
+               'seg':  tar.numpy().astype(np.float32)}
+        
+        # if the original data is also needed, activate this flag to store it where augmentations
+        # cant find it.
+        if self.return_orig:
+            out['data_orig']   = img
+            out['target_orig'] = tar
+        
+        return out
