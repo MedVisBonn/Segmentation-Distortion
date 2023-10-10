@@ -28,7 +28,7 @@ The datasets we used in the paper are openly available at
 For both cardiac MRI datasets, we used the nnUNet pre-processing (branch [nnunetv1](https://github.com/MIC-DKFZ/nnUNet/tree/nnunetv1)) and the resulting batch generators.
 
 ## Requirements
-The docker image is build on top of [NVidia's PyTorch image 23.07](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-23-07.html#rel-23-07) and thus needs NVidia drivers 530 or later. Additionally, to run GPU accelerated containers, the nvidia-container-toolkit has to be installed installed and configured. For more information, check out the official [NVIDIA Container Toolkit documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+The docker image is build on top of [NVidia's PyTorch image 23.07](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-23-07.html#rel-23-07) and thus needs NVidia drivers 530 or later. Additionally, to run GPU accelerated containers, the nvidia-container-toolkit has to be installed and configured. For more information, check out the official [NVIDIA Container Toolkit documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 Package dependencies are handled within the docker image.
 
 ## Usage
@@ -36,11 +36,27 @@ To explore the project, you can run a jupyter lab server on the port specified i
 ```bash
 jupyter lab --no-browser --allow-root --port 8888
 ```
+Training and evaluation scripts are located in src/apps and a collection of examples can be found in src/demos, but this project is still work in progress. In case you are stuck, please don't hesitate to reach out.
+
 ## License
 This work is licensed under the GNU General Public License v3
 
 ## Citation
-TBA
+```bash
+@Inproceedings{Lennartz2023Segmentation,  
+     year = {2023},  
+     title = {Segmentation {Distortion}: Quantifying {Segmentation} {Uncertainty} {Under} {Domain} {Shift} via the {Effects} of {Anomalous} {Activations}},  
+     type = {Inproceedings},  
+     series = {LNCS},  
+     volume = {14222},  
+     publisher = {Springer},  
+     booktitle = {Medical {Image} {Computing} and {Computer} {Assisted} {Intervention} ({MICCAI}), {Part} {III}},  
+     doi = {10.1007/978-3-031-43898-1_31},  
+     url = {https://link.springer.com/chapter/10.1007/978-3-031-43898-1_31},  
+     author = {Jonathan Lennartz and Thomas Schultz},  
+     pages = {316--325},  
+}
+```
 
 ## Contact
 For any questions or clarifications, feel free to reach out
