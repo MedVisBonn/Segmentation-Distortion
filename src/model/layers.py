@@ -48,7 +48,8 @@ class ConvBlock(nn.Module):
                                     padding=padding,
                                 ),
                                 nn.LayerNorm(
-                                    torch.Size([in_channels, in_dim, in_dim])
+                                    # little hacky, works for stride 1 and 2
+                                    torch.Size([in_channels, in_dim * stride, in_dim * stride])
                                 ),
                                 nn.LeakyReLU(),
                             ]
@@ -115,6 +116,9 @@ class ConvBlock(nn.Module):
         if self.block_size > 1:
             x = x + self.block(x) if self.residual else self.block(x)
         return self.sample(x)
+
+
+
 
 
 class ReshapeLayer(nn.Module):

@@ -55,15 +55,17 @@ class AugResDAE(nn.Module):
     """
     def __init__(
         self, 
-        in_channels, 
-        in_dim, 
-        latent_dim=128, 
-        depth=3, 
-        latent='dense', 
-        block_size=1,
+        in_channels: int, 
+        in_dim: int, 
+        latent_dim: int = 128, 
+        depth: int = 3, 
+        latent: str = 'dense', 
+        block_size: int = 1,
+        residual: str = True
     ):
         super().__init__()
         self.on = True
+        self.residual = residual
         self.ae = ChannelAE(
             in_channels, 
             in_dim, 
@@ -85,7 +87,10 @@ class AugResDAE(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if self.on:
-            res = self.ae(x)
-            return x + res
+            ae_out = self.ae(x)
+            if self.residual: 
+                return x + ae_out
+            else:
+                return ae_out
         else:
             return x

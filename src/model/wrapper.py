@@ -48,9 +48,7 @@ class Frankenstein(nn.Module):
         for layer_id in transformations:
             layer = self.seg_model.get_submodule(layer_id)
             hook = self._get_transformation_hook(transformations[layer_id], n_samples)
-            self.transformation_handles[layer_id] = layer.register_forward_pre_hook(
-                hook
-            )
+            self.transformation_handles[layer_id] = layer.register_forward_pre_hook(hook)
             
     def hook_inspect_transformation(
         self, 
@@ -141,8 +139,7 @@ class Frankenstein(nn.Module):
             return x_in_new
         
         return hook
-   
-    
+
 
     def remove_train_transformation_hook(self, layer_id: str) -> None:
         self.train_transformation_handles[layer_id].remove()
@@ -242,13 +239,11 @@ class FrankensteinV2(nn.Module):
     def hook_inspect_transformation(
         self, 
         transformations: Dict[str, nn.Module], 
-        n_samples: int,
-        arch: str = 'ae'
     ) -> None:
         for layer_id in transformations:
             if layer_id not in self.disabled_ids:
                 layer = self.seg_model.get_submodule(layer_id)
-                hook  = self._get_inspect_transformation_hook(transformations[layer_id], layer_id, n_samples, arch)
+                hook  = self._get_inspect_transformation_hook(transformations[layer_id], layer_id)
                 self.inspect_transformation_handles[layer_id] = layer.register_forward_pre_hook(hook)
             
 
@@ -325,42 +320,74 @@ class FrankensteinV2(nn.Module):
         return hook
             
         
+#     def _get_inspect_transformation_hook(
+#             self, 
+#             transformation: nn.Module, 
+#             layer_id: str, 
+#             n_samples: int,
+#             arch: str = 'ae',
+#         ) -> Callable:
+        
+#         @torch.no_grad()
+#         def hook(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
+#             x_in, *_ = x  # weird tuple, can use x_in = x[0]
+#             if n_samples == 0:
+#                 return x
+#             elif n_samples == -1:
+#                 mu, log_var, x_in_new = transformation(x_in)
+#             else:
+#                 x_in_new = x_in.unsqueeze(1).repeat(1, n_samples, 1, 1, 1).flatten(0, 1)
+#                 if arch == 'ae':
+#                     x_in_new = transformation(x_in_new)
+#                 elif arch == 'res_ae':
+#                     x_in_new, prior, residual = transformation(x_in_new)
+#                 x_in_new = torch.cat([x_in, x_in_new], dim=0)
+                
+#             if layer_id not in self.disabled_ids:
+#                 training_data = {
+#                     'input'  : x_in_new[ :1],
+#                     'recon'  : x_in_new[1: ],
+#                 }
+                
+#                 if arch == 'res_ae':
+#                     training_data['prior'] = prior
+#                     training_data['residual'] = residual
+                
+#                 self.inspect_data[layer_id] = training_data
+            
+#             return x_in_new
+        
+#         return hook
+    
+    
     def _get_inspect_transformation_hook(
             self, 
             transformation: nn.Module, 
             layer_id: str, 
-            n_samples: int,
-            arch: str = 'ae',
         ) -> Callable:
         
         @torch.no_grad()
         def hook(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
             x_in, *_ = x  # weird tuple, can use x_in = x[0]
-            if n_samples == 0:
-                return x
-            elif n_samples == -1:
-                mu, log_var, x_in_new = transformation(x_in)
-            else:
-                x_in_new = x_in.unsqueeze(1).repeat(1, n_samples, 1, 1, 1).flatten(0, 1)
-                if arch == 'ae':
-                    x_in_new = transformation(x_in_new)
-                elif arch == 'res_ae':
-                    x_in_new, prior, residual = transformation(x_in_new)
-                x_in_new = torch.cat([x_in, x_in_new], dim=0)
+#             #print(x_in.shape, x_in.shape[0] // 2)
+#             batch_size = x_in.shape[0] // 2
+#             x_orig, x_views  = torch.split(x_in, batch_size)
+#             x_in_denoised = transformation(x_views)
+            
+            x_orig = x_in[:1]
+            x_in_denoised = transformation(x_in)
+            residuals     = x_in_denoised - x_in
                 
             if layer_id not in self.disabled_ids:
-                training_data = {
-                    'input'  : x_in_new[ :1],
-                    'recon'  : x_in_new[1: ],
+                data = {
+                    'input'     : x_in,
+                    'denoised'  : x_in_denoised,
+                    'residuals' : residuals
                 }
                 
-                if arch == 'res_ae':
-                    training_data['prior'] = prior
-                    training_data['residual'] = residual
-                
-                self.inspect_data[layer_id] = training_data
+                self.inspect_data[layer_id] = data
             
-            return x_in_new
+            return torch.cat([x_orig, x_in_denoised[1:]], dim=0)
         
         return hook
    

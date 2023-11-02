@@ -7,7 +7,6 @@ from typing import Iterable, Dict, Callable, Tuple, Union
 from model.layers import ConvBlock, ReshapeLayer
 
     
-    
 class AE(nn.Module):
     """Autoencoder (AE) class to transform U-Net feature maps.
 

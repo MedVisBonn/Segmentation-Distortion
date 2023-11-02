@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+import torchmetrics
 from surface_distance.metrics import compute_surface_distances, compute_surface_dice_at_tolerance, compute_dice_coefficient
 
 
@@ -68,7 +69,7 @@ class SurfaceDiceCalgary(nn.Module):
     
 class DiceScoreCalgary(nn.Module):
     
-    def __init__(self, eps=1e-4):
+    def __init__(self, eps=1e-6):
         self.eps = eps
         super().__init__()
         
@@ -123,6 +124,28 @@ class DiceScoreMMS(nn.Module):
         dice         = (2.0 * intersection + self.eps) / (union + self.eps)
         
         return dice #[:, 1:]
+    
+    
+class AccMMS(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+        # init acc from torchmetrics for the M&M data, i.e.
+        # multiclass with 4 classes, micro averaging, 
+        # background included (ignore_index=0 if needed),
+        # and sample-wise averaging to get a score per slice
+        self.acc = torchmetrics.Accuracy(
+            task='multiclass', 
+            num_classes=4, 
+            multidim_average='samplewise', 
+            average='micro',
+#             ignore_index=0
+        )
+        
+    # does not aggregate over batch dim automatically
+    def forward(self, input_, target):
+        target = torch.argmax(target, dim=1)
+        return self.acc(input_, target)
 
         
 class SampleDice(nn.Module):

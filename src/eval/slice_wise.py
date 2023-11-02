@@ -241,7 +241,7 @@ class PoolingMahalabonisDetector(nn.Module):
 
             loss = loss.mean().float().cpu()
             for layer_id in self.layer_ids:
-                corr_coeffs[layer_id].update(dist[layer_id].cpu().mean(), 1-loss)
+                corr_coeffs[layer_id].update(dist[layer_id].cpu().mean().view(1), 1-loss.view(1))
 
         return corr_coeffs
 
@@ -600,10 +600,10 @@ class MeanDistSamplesDetector(nn.Module):
             loss = self.criterion(net_out, target)
             
             loss = loss.mean().float()
-                    
+
             score = torch.norm(umap)
             losses.append(1-loss.view(1))
-            corr_coeff.update(score.cpu(), 1-loss)
+            corr_coeff.update(score.cpu().view(1,), 1-loss.view(1,))
             
         return corr_coeff
 
