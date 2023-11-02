@@ -246,7 +246,11 @@ class CalgaryCampinasDataset(Dataset):
 
 
 class ACDCDataset(Dataset):
-    def __init__(self, data: str = "train", debug: bool = False):  # or 'val'
+    def __init__(
+        self, 
+        data: str = "train", # or 'val'
+        debug: bool = False
+    ):  
         self.data = data
         self.debug = debug
         self.crop = CenterCrop([256, 256])
@@ -315,13 +319,20 @@ class MNMDataset(Dataset):
     # 3: GE
     # 4: Canon
 
-    def __init__(self, vendor: str, debug: bool = False, adapt_size: str = "crop"):
+    def __init__(
+        self, 
+        vendor: str, 
+        debug: bool = False, 
+        selection: str = 'all_cases', 
+#         adapt_size: str = 'crop'
+    ):
         self.vendor = vendor
         self.debug = debug
-        if adapt_size == "crop":
-            self.crop = CenterCrop([256, 256])
-        elif adapt_size == "resize":
-            self.resize = Resize((256, 224))
+        self.selection = selection
+#         if adapt_size == "crop":
+        self.crop = CenterCrop([256, 256])
+#         elif adapt_size == "resize":
+#             self.resize = Resize((256, 224))
         self._get_dataset_information()
         self._load_selected_cases()
 
@@ -346,6 +357,7 @@ class MNMDataset(Dataset):
 
     def _load_selected_cases(self) -> None:
         self.data = []
+        counter = 0
         for key in self.vendor_keys:
             # load data as numpy array from nnUNet preprocessed folder
             data_np = np.load(self.dataset_info[key]["data_file"][:-4] + ".npz")["data"]
@@ -353,20 +365,52 @@ class MNMDataset(Dataset):
             data = torch.from_numpy(data_np)
             # Crop data to ACDC data shape, i.e. (256, 224).
             data = self.crop(data)
+            # merge background classes -1 and 0
+            data[1][data[1] < 0] = 0
+            assert (data[1] < 0).sum() == 0
+            
+            # mask slices with empty targets
+            if self.selection == 'non_empty_target':
+                mask = data[1].sum((1,2)) > 0
+            
+            # keep only slices that containt all 4 classes
+            if self.selection == 'all_classes':
+                mask = torch.zeros((data.shape[1]), dtype=bool)
+                for i, slc in enumerate(data[1]):
+                    mask[i] = len(torch.unique(slc)) >= 4
+            
+            # keep only slices that contain 3 out of the 4 classes
+            if self.selection == 'single_class_missing':
+                mask = torch.zeros((data.shape[1]), dtype=bool)
+                for i, slc in enumerate(data[1]):
+                    mask[i] = len(torch.unique(slc)) == 3
+
+            # dont mask if mask is none
+            if self.selection == 'all_cases':
+                pass
+            else:
+                assert len(mask.shape) == 1
+                data = data[:, mask]
+
             self.data.append(data)
+
         # cat list to single tensor
         self.data = torch.cat(self.data, dim=1).unsqueeze(2)
+        
         # for debugging purposes only take the first 50 cases
         if self.debug:
             self.data = self.data[:, :50]
         # split data into input and target
-        self.input = self.data[0]
+        self.input  = self.data[0]
         self.target = self.data[1]
         # swap values of 3 and 1 in target so that its
         # similar to the ACDC data convention
         self.target[self.target == 1] = 999
         self.target[self.target == 3] = 1
         self.target[self.target == 999] = 3
+#         # merge background classes -1 and 0
+#         self.target[self.target < 0] = 0
+        
 
     def __len__(self):
         return self.data.shape[1]
