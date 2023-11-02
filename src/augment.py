@@ -1,10 +1,11 @@
 import math
+import numpy as np
 from enum import Enum
 from typing import List, Tuple, Optional, Dict
 import random
 import torch
 from torch import Tensor
-
+from torch.utils.data import Dataset
 from torchvision.transforms import functional as F, InterpolationMode
 from batchgenerators.dataloading.data_loader import SlimDataLoaderBase
 
@@ -238,7 +239,7 @@ class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
     """
     def __init__(
         self, 
-        data: ACDCDataset, 
+        data: Dataset, 
         batch_size: int = 2, 
         return_orig: str = True
     ):
@@ -275,7 +276,7 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
     """
     def __init__(
         self, 
-        data: ACDCDataset, 
+        data: Dataset, 
         batch_size: int = 2, 
         return_orig: str = True
     ):
