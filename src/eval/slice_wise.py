@@ -13,7 +13,7 @@ from torchmetrics import (
     SpearmanCorrCoef, 
     AUROC)
 from losses import DiceScoreCalgary, DiceScoreMMS #
-from utils import _activate_dropout, UMapGenerator
+from utils import _activate_dropout, UMapGenerator, UMapScorePerSlice
 
 # CalgaryCampinasDataset
 def ood_eval(detector, dataloader, per_layer=False):
@@ -480,27 +480,42 @@ class AEMahalabonisDetector(nn.Module):
     
 class MeanDistSamplesDetector(nn.Module):
     """
-    Evaluation class for OOD and ESCE tasks based on VAEs.
+    Implements an out-of-distribution (OOD) detection and error correlation evaluation tool for 
+    autoencoder-based (AE) feature re-sampling systems. This class computes the mean distance between samples
+    and original segmentation maps to quantify uncertainty. Different distance functions and aggregation method
+    are available as per their respective class implementation, i.e. UMapGenerator and UMapScorePerSlice.
+
+    Parameters:
+    - model: Frankenstein model, i.e. segmentation network with attached AEs
+    - net_out: Output type of the network ('calgary', 'mms'; specific to dataset.).
+    - valid_loader: DataLoader for validation data.
+    - criterion: Criterion for computing the evaluation metric (e.g., DiceScoreCalgary).
+    - device: The device to run the model on.
+    - umap_method: Method for uncertainty mapping (e.g. cross_entropy)
+    - umap_reduction: Reduction method for uncertainty maps (e.g. mean, norm or nflips)
     """
     
     def __init__(
         self,
         model: nn.Module, 
-        n_samples: int,
         net_out: str,
         valid_loader: DataLoader,
-        criterion: nn.Module, # e.g. DiceScoreCalgary()
+        criterion: nn.Module,
+        umap_method: str,
+        umap_reduction: str,
         device: str = 'cuda:0',
-        method: str = 'vae'
     ):
         super().__init__()
         self.device = device
         self.model = model.to(device)
         self.net_out  = net_out
+        self.umap_method = umap_method
+        self.umap_reduction = umap_reduction
+        
         # Remove trainiung hooks, add evaluation hooks
         self.model.remove_all_hooks()        
         self.model.hook_transformations(self.model.transformations,
-                                        n_samples=n_samples)
+                                        n_samples=1)
         
         self.model.eval()
         self.model.freeze_seg_model()
@@ -508,8 +523,10 @@ class MeanDistSamplesDetector(nn.Module):
         self.valid_loader = valid_loader
         self.criterion = criterion
         self.auroc = AUROC(task = 'binary')
-        self.umap_generator = UMapGenerator(method=method,
+        self.umap_generator = UMapGenerator(method=umap_method,
                                             net_out=net_out)
+        self.score_fn = UMapScorePerSlice(reduction=umap_reduction)
+        
         
     @torch.no_grad()
     def testset_ood_detection(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
@@ -519,19 +536,19 @@ class MeanDistSamplesDetector(nn.Module):
                 input_ = batch['input'].to(0)
                 
                 if self.net_out == 'calgary':
-                    net_out_volume = []
+                    model_out_volume = []
                     umap_volume  = []
 
                     for input_chunk in input_:
-                        umap, net_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
-                        net_out_volume.append(net_out[:1].detach().cpu())
+                        umap, model_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                        model_out_volume.append(model_out[:1].detach().cpu())
                         umap_volume.append(umap)
 
-                    net_out = torch.cat(net_out_volume, dim=0)
+                    model_out = torch.cat(model_out_volume, dim=0)
                     umap = torch.cat(umap_volume, dim=0)
                     
                 if self.net_out == 'mms':
-                    umap, net_out = self.forward(input_.to(self.device))
+                    umap, model_out = self.forward(input_.to(self.device))
                 score = torch.norm(umap).cpu()
                 valid_dists.append(score)
                 
@@ -543,19 +560,19 @@ class MeanDistSamplesDetector(nn.Module):
             input_ = batch['input']
 
             if self.net_out == 'calgary':
-                net_out_volume = []
+                model_out_volume = []
                 umap_volume  = []
 
                 for input_chunk in input_:
-                    umap, net_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
-                    net_out_volume.append(net_out[:1].detach().cpu())
+                    umap, model_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                    model_out_volume.append(model_out[:1].detach().cpu())
                     umap_volume.append(umap)
 
-                net_out = torch.cat(net_out_volume, dim=0)
+                model_out = torch.cat(model_out_volume, dim=0)
                 umap = torch.cat(umap_volume, dim=0)
 
             if self.net_out == 'mms':
-                umap, net_out = self.forward(input_.to(self.device))
+                umap, model_out = self.forward(input_.to(self.device))
 
             score = torch.norm(umap).cpu()
             test_dists.append(score)
@@ -564,7 +581,7 @@ class MeanDistSamplesDetector(nn.Module):
         
         self.pred =  torch.cat([self.valid_dists, self.test_dists]).squeeze()
         self.target = torch.cat([self.valid_labels, self.test_labels]).squeeze()
-        print(self.pred.shape, self.target.shape)
+        #print(self.pred.shape, self.target.shape)
         AUROC = self.auroc(self.pred, self.target)
         
         return AUROC    
@@ -573,36 +590,39 @@ class MeanDistSamplesDetector(nn.Module):
     @torch.no_grad()
     def testset_correlation(self, test_loader: DataLoader) -> Dict[str, torch.Tensor]:
         corr_coeff = SpearmanCorrCoef()
-        losses = []
+        #losses = []
         for batch in test_loader:
             input_ = batch['input']
             target = batch['target']
             
             if self.net_out == 'calgary':
-                net_out_volume = []
+                model_out_volume = []
                 umap_volume  = []
 
                 for input_chunk in input_:
-                    umap, net_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
-                    net_out_volume.append(net_out[:1].detach().cpu())
+                    umap, model_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
+                    model_out_volume.append(model_out[:1].detach().cpu())
                     umap_volume.append(umap)
                     
-                net_out = torch.cat(net_out_volume, dim=0)
+                model_out = torch.cat(model_out_volume, dim=0)
                 umap = torch.cat(umap_volume, dim=0)
             
             if self.net_out == 'mms':
                 target[target == -1] = 0
                 # convert to one-hot encoding
                 target = F.one_hot(target.long(), num_classes=4).squeeze(1).permute(0,3,1,2)
-                umap, net_out = self.forward(input_.to(self.device))
-            
-            
-            loss = self.criterion(net_out, target)
-            
+                umap, model_out = self.forward(input_.to(self.device))
+
+            loss = self.criterion(model_out[:1], target)
             loss = loss.mean().float()
 
-            score = torch.norm(umap)
-            losses.append(1-loss.view(1))
+            assert model_out.shape[0] == 2, "Model produces too large outputs"
+            score = self.score_fn(
+                umap=umap, 
+                pred=model_out[:1], 
+                pred_r=model_out[1:]
+            )
+            
             corr_coeff.update(score.cpu().view(1,), 1-loss.view(1,))
             
         return corr_coeff
@@ -610,9 +630,9 @@ class MeanDistSamplesDetector(nn.Module):
     
     @torch.no_grad()  
     def forward(self, input_: torch.Tensor) -> torch.Tensor:
-        net_out = self.model(input_).cpu()
-        umap    = self.umap_generator(net_out).cpu()
-        return umap, net_out[:1]
+        model_out = self.model(input_).cpu()
+        umap    = self.umap_generator(model_out).cpu()
+        return umap, model_out   #[:1]
     
     
     

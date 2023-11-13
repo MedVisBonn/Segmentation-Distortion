@@ -137,3 +137,18 @@ class ReshapeLayer(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return x.view(-1, self.in_channels, self.in_dim, self.in_dim)
+
+    
+
+class DuplicateIdentity(nn.Module):
+    """Identity layer that has the same output signature as a VAE.
+    
+    This is used to attach hooks that expect a certain output structure.
+    Its also useful when the layer we want to attach to splits its output
+    into multiple paths, e.g. right before a skip connection in a UNet.
+    """
+    def __init__(self, n_samples=10):
+        super().__init__()
+        
+    def forward(self, x_in: torch.Tensor) -> torch.Tensor:
+        return None, None, x_in

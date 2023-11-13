@@ -1,143 +1,82 @@
 import os
 import random
-from typing import Iterable, Dict, Callable, Tuple, Union, List
+from typing import (
+    Iterable, 
+    Dict, 
+    Callable, 
+    Tuple, 
+    Union, 
+    List
+)
 from copy import deepcopy
-import nibabel as nib
-import wandb
 import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.metrics import pairwise_distances_argmin_min, auc
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances_argmin_min, auc
+import nibabel as nib
+import wandb
 import matplotlib.pyplot as plt
-#from trainer import Trainer
-
-
-#def get_subjects(vendor='philips', strength='15') -> Union[str, str]:
-#    keywords = [vendor, strength]
-#    if os.path.isdir('../data'):
-#        data_dir = '../data/'
-#    elif os.path.isdir('../../data'):
-#        data_dir = '../../data/'
-#        
-#    path_trunc = data_dir + 'conp-dataset/projects/calgary-campinas/CC359/Reconstructed/'
-#    files = os.listdir(path_trunc + 'Original/')
-#    
-#    subjects = []
-#    for file_name in files:
-#        if all(keyword in file_name for keyword in keywords):
-#            subjects.append(file_name.split('.')[0])
-#            
-#    return subjects, path_trunc
-
-            
-#def get_example_subject(vendor='philips', strength='15', rand=False) -> Union[str, str]:
-#    subjects, path_trunc = get_subjects(vendor=vendor, strength=strength)
-#    if rand:
-#        return random.choice(subjects), path_trunc
-#    else:
-#        return subjects[0], path_trunc
-#    
-#    
-def volume_collate(batch: List[dict]) -> dict:
-    return batch[0]
-
-
-def _activate_dropout(m):
-    if type(m) == nn.Dropout:
-        m.train()
-        
-
-class DuplicateIdentity(nn.Module):
-    
-    def __init__(self, n_samples=10):
-        super().__init__()
-        
-    def forward(self, x_in: torch.Tensor) -> torch.Tensor:
-        return None, None, x_in
-#    
-#
-#class FeatureExtractor(nn.Module):
-#    def __init__(self, model: nn.Module, layer_ids: Iterable[str], copy=True, device='cpu'):
-#        super().__init__()
-#        self.device = device
-#        if copy:
-#            self.model = deepcopy(model).to(device)
-#        else:
-#            self.model = model.to(device)
-#            print(f"model is on device {device} now")
-#        
-#        self._features = {layer_id: [] for layer_id in layer_ids}
-#        
-#        for layer_id in layer_ids:
-#            layer = self.model.get_submodule(layer_id)
-#            layer.register_forward_hook(self.save_features_hook(layer_id))
-#
-#
-#    def save_features_hook(self, layer_id: str) -> Callable:
-#        def fn(_, __, output: Tuple) -> None:
-#            self._features[layer_id].append(output.cpu())
-#        return fn
-#
-#    
-#    def forward(self, dataset: Dataset) -> Dict[str, Tensor]:
-#        
-#        dataloader = DataLoader(dataset, batch_size=8,
-#                            shuffle=False, num_workers=10, drop_last=False)
-#
-#        #assert next(self.model.parameters()).device.type == self.device
-#        
-#        with torch.no_grad():
-#            for batch in dataloader:
-#                in_ = batch['input'].to(device)
-#                # assert in_.device.type == 'cpu'
-#                _ = self.model(in_)
-#                                
-#        for layer_id in self._features:
-#            self._features[layer_id] = torch.cat(self._features[layer_id], dim=0)
-#                            
-#        return self._features.detach().cpu()
 
 
 
-#class FeatureSampler(nn.Module):
-#    def __init__(self, model: nn.Module, samplers: Dict[str, nn.Module], n_samples=10, copy=True):
-#        super().__init__()
-#        if copy:
-#            self.model = deepcopy(model)
-#        else:
-#            self.model = model
-#        self.n_samples = n_samples
-#            
-#        for layer_id in samplers:
-#            layer = self.model.get_submodule(layer_id)
-#            layer.register_forward_pre_hook(self.sampler_hook(samplers[layer_id]))
-#        
-#    def sampler_hook(self, sampler: nn.Module) -> Callable:
-#        def fn(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
-#            x_in, *_ = x  # weird tuple, can use x_in = x[0]
-#            if self.n_samples == -1:
-#                _, _, samples = sampler(x_in)
-#                return samples
-#            else:
-#                _, _, samples = sampler(x_in.repeat(self.n_samples, 1, 1, 1))
-#                return torch.cat([x_in, samples], dim=0)
-#        return fn
-#
-#    def forward(self, x: Tensor) -> Tensor:
-#        return self.model(x)
-    
-    
-    
 ### Evaluation
+class UMapScorePerSlice(nn.Module):
+    """Calculates scores for each input slice.
+    """
+        
+    def __init__(
+        self, 
+        reduction: str
+    ):
+        super().__init__()
+        self.r = reduction
+        # TODO: default to keep only first dim,
+        #       flexible where possible (e.g. mean)
+        self.dim = (1,2,3)
+        
+    @torch.no_grad()
+    def forward(
+        self, 
+        umap:   Tensor = None, 
+        pred:   Tensor = None, # original segmentation prediction
+        pred_r: Tensor = None  # re-sampled segmentation prediction
+    ) -> Tensor:
+        
+        if self.r == 'mean':
+            assert umap is not None, "reduction is set to mean over umap, but umap is None"
+            return umap.mean()
+        
+        elif self.r == 'norm':
+            # The frobenius (i.e. euclidean) norm is simply the sum of squared elements, square rooted
+            assert umap is not None, "reduction is set to norm of umap, but umap is None"
+            # assert self.dim == (1,2,3), "setting the dim parameter doesn't do anything for norm reduction"
+            return torch.norm(umap)
+        
+        elif self.r == 'nflips':
+            assert pred is not None, "reduction is set to fraction of flipped predictions, but pred is None"
+            assert pred_r is not None, "reduction is set to fraction of flipped predictions, but pred_r is None"
+            flip_mask = (torch.argmax(pred, dim=1, keepdim=True) != torch.argmax(pred_r, dim=1, keepdim=True)) * 1.
+            return flip_mask.sum()
+        
+        elif self.r == 'nNflips':
+            assert pred is not None, "reduction is set to number of flipped predictions, but pred is None"
+            assert pred_r is not None, "reduction is set to number of flipped predictions, but pred_r is None"
+            flip_mask = (torch.argmax(pred, dim=1, keepdim=True) != torch.argmax(pred_r, dim=1, keepdim=True)) * 1.
+            return flip_mask.mean()
+
+        
+
 class Thresholder(nn.Module):
     """
     Thresholds uncertainty maps.
     
-    PyTorch module to threshold uncertainty maps at n_taus thresholds,
-    which are uniformly placed between 0 and 1.
+    PyTorch module to threshold uncertainty maps at n_taus thresholds.
+    Placement of thresholds is done outside the class, mostly because 
+    quantile thresholding needs lots of information that are not part of
+    this class.
     """
     
     def __init__(
@@ -150,6 +89,7 @@ class Thresholder(nn.Module):
     @torch.no_grad()
     def forward(self, x: Tensor) -> Tensor:
         return (x.detach() >= self.taus).float()
+    
     
     
 class UMapGenerator(nn.Module):
@@ -190,7 +130,6 @@ class UMapGenerator(nn.Module):
             x_prob = self.m(x[:1])
             umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy()
 
-            
         elif self.method == 'kl_divergence':
             x_in = F.log_softmax(x[:1], dim=1)
             umap = self.kl(x_in, self.m(x[1:]))
@@ -261,6 +200,7 @@ class UMapGenerator(nn.Module):
         
         #print(umap.shape)
         return umap
+    
     
     
 class Metrics(object):
@@ -376,6 +316,238 @@ class Metrics(object):
             'Error Rate': self.error_rate
         })
 
+        
+        
+class EarlyStopping(object):
+    def __init__(self, mode='min', min_delta=0, patience=7):
+        self.mode = mode
+        self.min_delta = min_delta
+        self.patience = patience
+        self.best = None
+        self.num_bad_epochs = 0
+        self.is_better = None
+        
+        if mode == 'min':
+            self.is_better = lambda a, best: a < best - min_delta
+        if mode == 'max':
+            self.is_better = lambda a, best: a > best + min_delta
+
+        if patience == 0:
+            self.is_better = lambda a, b: True
+            self.step = lambda a: False
+
+            
+    def step(self, metrics):
+        if self.best is None:
+            self.best = metrics
+            return False
+
+        if self.is_better(metrics, self.best):
+            self.num_bad_epochs = 0
+            self.best = metrics
+        else:
+            self.num_bad_epochs += 1
+
+        if self.num_bad_epochs >= self.patience:
+            return True
+        
+        return False
+
+
+    
+def volume_collate(batch: List[dict]) -> dict:
+    return batch[0]
+
+
+
+def _activate_dropout(m):
+    if type(m) == nn.Dropout:
+        m.train()
+    
+    
+    
+def reject_randomness(manualSeed):
+    np.random.seed(manualSeed)
+    rand.seed(manualSeed)
+    torch.manual_seed(manualSeed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(manualSeed)
+        torch.cuda.manual_seed_all(manualSeed)
+
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    return None
+
+
+
+def epoch_average(losses, counts):
+    losses_np = np.array(losses)
+    counts_np = np.array(counts)
+    weighted_losses = losses_np * counts_np
+    
+    return weighted_losses.sum()/counts_np.sum()
+
+
+
+def average_metrics(metric_list, counts):
+    metrics = dict(metric_list[0])
+    counts_np = np.array(counts)
+    
+    metrics[list(metrics.keys())[0]] = 0
+    for layer in list(metrics.keys())[1:]:
+        metrics[layer] = dict.fromkeys(metrics[layer], 0)
+        
+        for metric, count in zip(metric_list, counts_np):
+            
+            metrics[list(metrics.keys())[0]] += metric[list(metrics.keys())[0]] * count
+            for m in metric[layer]:
+                metrics[layer][m] += metric[layer][m] * count
+        
+        metrics[list(metrics.keys())[0]] /= counts_np.sum()
+        for m in metrics[layer]:
+            metrics[layer][m] /= counts_np.sum()
+            
+    return metrics
+            
+    
+        
+def slice_selection(dataset: Dataset, indices: Tensor, n_cases: int = 10) -> Tensor:
+    
+    slices = dataset.__getitem__(indices)['input']
+    kmeans_in = slices.reshape(len(indices), -1)
+    kmeans = KMeans(n_clusters=n_cases).fit(kmeans_in)
+    idx, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, kmeans_in)
+    return indices[idx]
+
+
+
+def dataset_from_indices(dataset: Dataset, indices: Tensor) -> DataLoader:
+    data = dataset.__getitem__(indices)
+    
+    class CustomDataset(Dataset):
+        
+        def __init__(self, input: Tensor, labels: Tensor, 
+                     voxel_dim: Tensor):
+            self.input = input
+            self.labels = labels
+            self.voxel_dim = voxel_dim
+            
+        def __getitem__(self, idx):
+            return {'input': self.input[idx],
+                    'target': self.labels[idx],
+                    'voxel_dim': self.voxel_dim[idx]}
+        
+        def __len__(self):
+            return self.input.size(0)
+        
+    return CustomDataset(*data.values())
+
+
+
+#from trainer import Trainer
+
+
+#def get_subjects(vendor='philips', strength='15') -> Union[str, str]:
+#    keywords = [vendor, strength]
+#    if os.path.isdir('../data'):
+#        data_dir = '../data/'
+#    elif os.path.isdir('../../data'):
+#        data_dir = '../../data/'
+#        
+#    path_trunc = data_dir + 'conp-dataset/projects/calgary-campinas/CC359/Reconstructed/'
+#    files = os.listdir(path_trunc + 'Original/')
+#    
+#    subjects = []
+#    for file_name in files:
+#        if all(keyword in file_name for keyword in keywords):
+#            subjects.append(file_name.split('.')[0])
+#            
+#    return subjects, path_trunc
+
+            
+#def get_example_subject(vendor='philips', strength='15', rand=False) -> Union[str, str]:
+#    subjects, path_trunc = get_subjects(vendor=vendor, strength=strength)
+#    if rand:
+#        return random.choice(subjects), path_trunc
+#    else:
+#        return subjects[0], path_trunc
+#    
+#    
+#    
+#
+#class FeatureExtractor(nn.Module):
+#    def __init__(self, model: nn.Module, layer_ids: Iterable[str], copy=True, device='cpu'):
+#        super().__init__()
+#        self.device = device
+#        if copy:
+#            self.model = deepcopy(model).to(device)
+#        else:
+#            self.model = model.to(device)
+#            print(f"model is on device {device} now")
+#        
+#        self._features = {layer_id: [] for layer_id in layer_ids}
+#        
+#        for layer_id in layer_ids:
+#            layer = self.model.get_submodule(layer_id)
+#            layer.register_forward_hook(self.save_features_hook(layer_id))
+#
+#
+#    def save_features_hook(self, layer_id: str) -> Callable:
+#        def fn(_, __, output: Tuple) -> None:
+#            self._features[layer_id].append(output.cpu())
+#        return fn
+#
+#    
+#    def forward(self, dataset: Dataset) -> Dict[str, Tensor]:
+#        
+#        dataloader = DataLoader(dataset, batch_size=8,
+#                            shuffle=False, num_workers=10, drop_last=False)
+#
+#        #assert next(self.model.parameters()).device.type == self.device
+#        
+#        with torch.no_grad():
+#            for batch in dataloader:
+#                in_ = batch['input'].to(device)
+#                # assert in_.device.type == 'cpu'
+#                _ = self.model(in_)
+#                                
+#        for layer_id in self._features:
+#            self._features[layer_id] = torch.cat(self._features[layer_id], dim=0)
+#                            
+#        return self._features.detach().cpu()
+
+
+
+#class FeatureSampler(nn.Module):
+#    def __init__(self, model: nn.Module, samplers: Dict[str, nn.Module], n_samples=10, copy=True):
+#        super().__init__()
+#        if copy:
+#            self.model = deepcopy(model)
+#        else:
+#            self.model = model
+#        self.n_samples = n_samples
+#            
+#        for layer_id in samplers:
+#            layer = self.model.get_submodule(layer_id)
+#            layer.register_forward_pre_hook(self.sampler_hook(samplers[layer_id]))
+#        
+#    def sampler_hook(self, sampler: nn.Module) -> Callable:
+#        def fn(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
+#            x_in, *_ = x  # weird tuple, can use x_in = x[0]
+#            if self.n_samples == -1:
+#                _, _, samples = sampler(x_in)
+#                return samples
+#            else:
+#                _, _, samples = sampler(x_in.repeat(self.n_samples, 1, 1, 1))
+#                return torch.cat([x_in, samples], dim=0)
+#        return fn
+#
+#    def forward(self, x: Tensor) -> Tensor:
+#        return self.model(x)
+    
+        
+        
 #class Predictor(nn.Module):
 #    
 #    def __init__(self):
@@ -539,118 +711,7 @@ class Metrics(object):
 #            'Error Rate': self.error_rate
 #        })
         
-        
-        
-class EarlyStopping(object):
-    def __init__(self, mode='min', min_delta=0, patience=7):
-        self.mode = mode
-        self.min_delta = min_delta
-        self.patience = patience
-        self.best = None
-        self.num_bad_epochs = 0
-        self.is_better = None
-        
-        if mode == 'min':
-            self.is_better = lambda a, best: a < best - min_delta
-        if mode == 'max':
-            self.is_better = lambda a, best: a > best + min_delta
 
-        if patience == 0:
-            self.is_better = lambda a, b: True
-            self.step = lambda a: False
-
-            
-    def step(self, metrics):
-        if self.best is None:
-            self.best = metrics
-            return False
-
-        if self.is_better(metrics, self.best):
-            self.num_bad_epochs = 0
-            self.best = metrics
-        else:
-            self.num_bad_epochs += 1
-
-        if self.num_bad_epochs >= self.patience:
-            return True
-        
-        return False
-    
-        
-def reject_randomness(manualSeed):
-    np.random.seed(manualSeed)
-    rand.seed(manualSeed)
-    torch.manual_seed(manualSeed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(manualSeed)
-        torch.cuda.manual_seed_all(manualSeed)
-
-    torch.backends.cudnn.enabled = False
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-    return None
-
-
-
-def epoch_average(losses, counts):
-    losses_np = np.array(losses)
-    counts_np = np.array(counts)
-    weighted_losses = losses_np * counts_np
-    
-    return weighted_losses.sum()/counts_np.sum()
-
-
-def average_metrics(metric_list, counts):
-    metrics = dict(metric_list[0])
-    counts_np = np.array(counts)
-    
-    metrics[list(metrics.keys())[0]] = 0
-    for layer in list(metrics.keys())[1:]:
-        metrics[layer] = dict.fromkeys(metrics[layer], 0)
-        
-        for metric, count in zip(metric_list, counts_np):
-            
-            metrics[list(metrics.keys())[0]] += metric[list(metrics.keys())[0]] * count
-            for m in metric[layer]:
-                metrics[layer][m] += metric[layer][m] * count
-        
-        metrics[list(metrics.keys())[0]] /= counts_np.sum()
-        for m in metrics[layer]:
-            metrics[layer][m] /= counts_np.sum()
-            
-    return metrics
-            
-    
-        
-def slice_selection(dataset: Dataset, indices: Tensor, n_cases: int = 10) -> Tensor:
-    
-    slices = dataset.__getitem__(indices)['input']
-    kmeans_in = slices.reshape(len(indices), -1)
-    kmeans = KMeans(n_clusters=n_cases).fit(kmeans_in)
-    idx, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, kmeans_in)
-    return indices[idx]
-
-
-def dataset_from_indices(dataset: Dataset, indices: Tensor) -> DataLoader:
-    data = dataset.__getitem__(indices)
-    
-    class CustomDataset(Dataset):
-        
-        def __init__(self, input: Tensor, labels: Tensor, 
-                     voxel_dim: Tensor):
-            self.input = input
-            self.labels = labels
-            self.voxel_dim = voxel_dim
-            
-        def __getitem__(self, idx):
-            return {'input': self.input[idx],
-                    'target': self.labels[idx],
-                    'voxel_dim': self.voxel_dim[idx]}
-        
-        def __len__(self):
-            return self.input.size(0)
-        
-    return CustomDataset(*data.values())
 
 
 #def vis_umaps(trainer: list, dataset: Dataset, path: str, device: str = 'cuda:0'):
