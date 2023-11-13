@@ -116,6 +116,9 @@ class UMapGenerator(nn.Module):
     @torch.no_grad()
     def forward(self, x: Tensor) -> Tensor:
         
+        if self.method == 'none':
+            return None
+        
         x = x.detach()
         
         #################################
