@@ -8,6 +8,173 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision.transforms import functional as F, InterpolationMode
 from batchgenerators.dataloading.data_loader import SlimDataLoaderBase
+from batchgenerators.transforms.spatial_transforms import SpatialTransform, MirrorTransform
+from batchgenerators.transforms.resample_transforms import SimulateLowResolutionTransform
+from batchgenerators.transforms.noise_transforms import GaussianNoiseTransform, GaussianBlurTransform
+from batchgenerators.transforms.color_transforms import BrightnessMultiplicativeTransform, ContrastAugmentationTransform, GammaTransform
+from batchgenerators.transforms.utility_transforms import RemoveLabelTransform, RenameTransform, NumpyToTensor
+
+
+
+nnUNet_train_augmentations = [
+#     SegChannelSelectionTransform(
+#         label_key = 'seg', 
+#         channels = [0], 
+#         keep_discarded = False
+#     ),
+    SpatialTransform(
+        independent_scale_for_each_axis = False, 
+        p_rot_per_sample = 0.2, 
+        p_scale_per_sample = 0.2, 
+        p_el_per_sample = 0.2, 
+        data_key = 'data', 
+        label_key = 'seg', 
+        patch_size = np.array([256, 256]), 
+        patch_center_dist_from_border = None, 
+        do_elastic_deform = False, 
+        alpha = (0.0, 200.0), 
+        sigma = (9.0, 13.0), 
+        do_rotation = True, 
+        angle_x = (-3.141592653589793, 3.141592653589793), 
+        angle_y = (-0.0, 0.0), 
+        angle_z = (-0.0, 0.0), 
+        do_scale = True,
+        scale = (0.7, 1.4), 
+        border_mode_data = 'constant',
+        border_cval_data = 0, 
+        order_data = 3, 
+        border_mode_seg = 'constant',
+        border_cval_seg = -1, 
+        order_seg = 1,
+        random_crop = False,
+        p_rot_per_axis = 1, 
+        p_independent_scale_per_axis = 1
+    ),
+    GaussianNoiseTransform(
+        p_per_sample = 0.1, 
+        data_key = 'data', 
+        noise_variance = (0, 0.1), 
+        p_per_channel = 1, 
+        per_channel = False
+    ),
+    GaussianBlurTransform(
+        p_per_sample = 0.2, 
+        different_sigma_per_channel = True, 
+        p_per_channel = 0.5, 
+        data_key = 'data', 
+        blur_sigma = (0.5, 1.0), 
+        different_sigma_per_axis = False, 
+        p_isotropic = 0
+    ),
+    BrightnessMultiplicativeTransform(
+        p_per_sample = 0.15, 
+        data_key = 'data', 
+        multiplier_range = (0.75, 1.25), 
+        per_channel = True
+    ),
+    ContrastAugmentationTransform(
+        p_per_sample = 0.15, 
+        data_key = 'data', 
+        contrast_range = (0.75, 1.25), 
+        preserve_range = True, 
+        per_channel = True, 
+        p_per_channel = 1
+    ),
+    SimulateLowResolutionTransform(
+        order_upsample = 3, 
+        order_downsample = 0, 
+        channels = None, 
+        per_channel = True, 
+        p_per_channel = 0.5, 
+        p_per_sample = 0.25, 
+        data_key = 'data',
+        zoom_range = (0.5, 1), 
+        ignore_axes = None
+    ),
+    GammaTransform(
+        p_per_sample = 0.1,
+        retain_stats = True, 
+        per_channel = True, 
+        data_key = 'data', 
+        gamma_range = (0.7, 1.5), 
+        invert_image = True
+    ),
+    GammaTransform(
+        p_per_sample = 0.3,
+        retain_stats = True, 
+        per_channel = True, 
+        data_key = 'data', 
+        gamma_range = (0.7, 1.5), 
+        invert_image = False
+    ),
+    MirrorTransform(
+        p_per_sample = 1, 
+        data_key = 'data', 
+        label_key = 'seg', 
+        axes = (0, 1)
+    ),
+#     MaskTransform(
+#         dct_for_where_it_was_used = OrderedDict([(0, False)]), 
+#         seg_key = 'seg', 
+#         data_key = 'data', 
+#         set_outside_to = 0, 
+#         mask_idx_in_seg = 0
+#     ),
+    RemoveLabelTransform(
+        output_key = 'seg', 
+        input_key = 'seg', 
+        replace_with = 0, 
+        remove_label = -1
+    ),
+    RenameTransform(
+        delete_old = True, 
+        out_key = 'target', 
+        in_key = 'seg'
+    ),
+#     DownsampleSegForDSTransform2(
+#         axes = None, 
+#         output_key = 'target', 
+#         input_key = 'target', 
+#         order = 0, 
+#         ds_scales = [[1, 1, 1], [0.5, 0.5], [0.25, 0.25], [0.125, 0.125], [0.0625, 0.0625], [0.03125, 0.03125]]
+#     ),
+    NumpyToTensor(
+        keys = ['data', 'target'], 
+        cast_to = 'float'
+    )
+]
+
+
+
+nnUNet_val_augmentations = [
+    RemoveLabelTransform(
+        output_key = 'seg', 
+        input_key = 'seg',
+        replace_with = 0,
+        remove_label = -1
+    ),
+#     SegChannelSelectionTransform(
+#         label_key = 'seg', 
+#         channels = [0], 
+#         keep_discarded = False
+#     ),
+    RenameTransform(
+        delete_old = True,
+        out_key = 'target',
+        in_key = 'seg'
+    ),
+#     DownsampleSegForDSTransform2(
+#         axes = None, 
+#         output_key = 'target',
+#         input_key = 'target', 
+#         order = 0, 
+#         ds_scales = [[1, 1, 1], [0.5, 0.5], [0.25, 0.25], [0.125, 0.125], [0.0625, 0.0625], [0.03125, 0.03125]]
+#     ),
+    NumpyToTensor(
+        keys = ['data', 'target'], 
+        cast_to = 'float')    
+]
+
 
 def _apply_op(
     img: Tensor,
@@ -300,3 +467,4 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
             out['target_orig'] = tar
         
         return out
+    

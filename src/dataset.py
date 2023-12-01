@@ -249,10 +249,12 @@ class ACDCDataset(Dataset):
     def __init__(
         self, 
         data: str = "train", # or 'val'
-        debug: bool = False
+        debug: bool = False,
+        root: str = '../../../'
     ):  
         self.data = data
         self.debug = debug
+        self.root = root
         self.crop = CenterCrop([256, 256])
         self.resize = Resize((256, 224))
         self._get_dataset_information()
@@ -274,7 +276,7 @@ class ACDCDataset(Dataset):
         unpack_dataset(p)
         # select keys that are relevant for a specific vendor
         with open(
-            "../../../nnUNet/data/nnUNet_preprocessed/Task500_ACDC/splits_final.pkl",
+            f"{self.root}nnUNet/data/nnUNet_preprocessed/Task500_ACDC/splits_final.pkl",
             "rb",
         ) as f:
             self.plans = pickle.load(f)
