@@ -239,7 +239,7 @@ class CalgaryCriterionAE(nn.Module):
         
         if self.diff:
             loss = self.loss(samples, unet_out)
-            metrics = {'output_loss': loss.item()}
+            metrics = {'output_diff': loss.item()}
         else:
             loss = 0
             metrics={}
@@ -283,13 +283,14 @@ class MNMCriterionAE(nn.Module):
         
         
         #print("Recon: yes")
-        mse = 0
-        for layer in train_data:
-            metrics[layer] = {}
-            mse_layer = train_data[layer]['mse']
-            mse += mse_layer
-            metrics[layer]['mse'] = mse_layer.item()
         if self.recon:
+            mse = 0
+            for layer in train_data:
+                metrics[layer] = {}
+                mse_layer = train_data[layer]['mse']
+                mse += mse_layer
+                metrics[layer]['mse'] = mse_layer.item()
+        
             loss += mse
             
         return loss, metrics    

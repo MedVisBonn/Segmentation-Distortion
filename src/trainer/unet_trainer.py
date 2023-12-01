@@ -23,14 +23,15 @@ class UNetTrainerCalgary():
         self, 
         model: nn.Module, 
         criterion: Callable, 
-        train_loader: DataLoader,
+        train_generator: DataLoader,
         valid_loader: DataLoader, 
         root: str, 
         description: str = 'untitled', 
         lr: float = 1e-4, 
-        n_epochs: int = 250, 
+        n_epochs: int = 250,
+        num_batches_per_epoch: int = 50,
         patience: int = 5, 
-        warm_up=True,
+        #warm_up=True,
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None,
         log: bool = True
@@ -38,11 +39,12 @@ class UNetTrainerCalgary():
         self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model        = model.to(self.device)
         self.criterion    = criterion
-        self.train_loader = train_loader
+        self.train_generator = train_generator
         self.valid_loader = valid_loader 
         self.root         = root
         self.description  = description
         self.lr           = lr
+        self.num_batches_per_epoch = num_batches_per_epoch
         self.n_epochs     = n_epochs
         self.patience     = patience
         self.es_mode      = es_mode
@@ -52,7 +54,7 @@ class UNetTrainerCalgary():
         self.scheduler    = ReduceLROnPlateau(self.optimizer, 'min', patience=self.patience)
         self.es           = EarlyStopping(mode=self.es_mode, patience=2*self.patience)
         self.scaler       = GradScaler()
-        self.warm_up      = warm_up
+        #self.warm_up      = warm_up
         self.history      = {'train loss': [], 'valid loss' : []}
         if self.eval_metrics is not None:
             self.history = {**self.history, **{key: [] for key in self.eval_metrics.keys()}}
@@ -110,18 +112,23 @@ class UNetTrainerCalgary():
     
     def train_epoch(self):
         loss_list, batch_sizes = [], []
-        for batch in self.train_loader:
-            input_ = batch['input']
-            target = batch['target']
+        
+        for it in range(self.num_batches_per_epoch):
+            
+            batch = next(self.train_generator)
+            input_ = batch['data']
+            target = batch['target']#.long()
+            
+            if it == 0:
+                assert input_.shape == target.shape, 'input and target shapes dont match'
+                
             self.optimizer.zero_grad()
             with autocast():
                 net_out = self.inference_step(input_)
                 loss = self.criterion(net_out, target.to(self.device))
-            #loss.backward()
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
             nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0, norm_type=2.0)
-            #self.optimizer.step()
             self.scaler.step(self.optimizer)
             self.scaler.update()
             loss_list.append(loss.item())
@@ -145,7 +152,7 @@ class UNetTrainerCalgary():
             net_out = self.inference_step(data) 
             self.model.train()
         else:
-            data, target, _ = next(iter(self.train_loader)).values()
+            data, target, _ = next(iter(self.train_generator)).values()
             net_out = self.inference_step(data)
         x_hat = net_out
         
@@ -273,7 +280,7 @@ class UNetTrainerCalgary():
     
     
     @torch.no_grad()
-    def get_subset(self, dataloader: DataLoader, n_cases=10, part="tail") -> DataLoader:
+    def get_subset(self, dataloader: DataLoader, fraction=0.1, n_cases=10, part="tail") -> DataLoader:
         assert dataloader.batch_size == 1
         self.model.eval()
         loss_list = []
@@ -287,10 +294,13 @@ class UNetTrainerCalgary():
         loss_tensor = torch.tensor(loss_list)
         indices = torch.argsort(loss_tensor, descending=True)
         len_ = len(loss_list)
+        
+        devisor = int(1 / fraction)
+        
         if part == 'tail':
-            indices = indices[:len_ // 10]
+            indices = indices[:len_ // devisor]
         elif part == 'head':
-            indices = indices[-len_ // 10:]   
+            indices = indices[-len_ // devisor:]   
             
         indices_selection = slice_selection(dataloader.dataset, indices, n_cases=n_cases)
         subset            = dataset_from_indices(dataloader.dataset, indices_selection)
@@ -340,18 +350,18 @@ class UNetTrainerCalgary():
         self.model.eval()
         valid_loss = self.eval_epoch()
         self.training_time = time.time()
-        if self.warm_up:
-            augment = self.train_loader.dataset.augment
+#         if self.warm_up:
+#             augment = self.train_loader.dataset.augment
         
         if self.log:
             wandb.log({}, commit=True)
         
         for epoch in progress_bar:
-            if self.warm_up:
-                if epoch < 5:
-                    self.train_loader.dataset.augment = False
-                else:
-                    self.train_loader.dataset.augment = augment
+#             if self.warm_up:
+#                 if epoch < 5:
+#                     self.train_loader.dataset.augment = False
+#                 else:
+#                     self.train_loader.dataset.augment = augment
                 
             self.model.train()
             train_loss = self.train_epoch()
@@ -398,12 +408,13 @@ class UNetTrainerACDC():
         lr: float = 1e-4, 
         n_epochs: int = 250, 
         patience: int = 5, 
-        warm_up=True,
+        #warm_up=True,
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None,
-        log: bool = True
+        log: bool = True,
+        device = 0
     ):
-        self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device       = device
         self.model        = model.to(self.device)
         self.criterion    = criterion
         self.train_loader = train_loader
@@ -422,7 +433,7 @@ class UNetTrainerACDC():
         self.scheduler    = ReduceLROnPlateau(self.optimizer, 'min', patience=self.patience)
         self.es           = EarlyStopping(mode=self.es_mode, patience=2*self.patience)
         self.scaler       = GradScaler()
-        self.warm_up      = warm_up
+        #self.warm_up      = warm_up
         self.history      = {'train loss': [], 'valid loss' : []}
         if self.eval_metrics is not None:
             self.history = {**self.history, **{key: [] for key in self.eval_metrics.keys()}}

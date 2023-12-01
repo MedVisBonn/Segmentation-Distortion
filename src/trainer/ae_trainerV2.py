@@ -16,8 +16,8 @@ import wandb
 from tqdm.auto import tqdm
 from utils import EarlyStopping, epoch_average, average_metrics
 
-        
-class AETrainerCalgary:
+
+class AETrainerCalgaryV2:
     def __init__(
         self, 
         model: nn.Module, 
@@ -25,6 +25,8 @@ class AETrainerCalgary:
         criterion: Callable, 
         train_loader: DataLoader,
         valid_loader: DataLoader, 
+        num_batches_per_epoch: int,
+        num_val_batches_per_epoch: int,
         description: str,
         root: str,
         target: str = 'output', #gt
@@ -42,6 +44,8 @@ class AETrainerCalgary:
         self.criterion    = criterion
         self.train_loader = train_loader
         self.valid_loader = valid_loader
+        self.num_batches_per_epoch = num_batches_per_epoch
+        self.num_val_batches_per_epoch = num_val_batches_per_epoch
         self.root         = root
         self.description  = description
         self.target       = target
@@ -70,17 +74,31 @@ class AETrainerCalgary:
         #    run = wandb.init(reinit=True, name='log_' + self.description, project='Thesis-VAE')
         
         
+#     def inference_step(self, x):
+#         with torch.no_grad():
+#             unet_out = self.unet(x.to(self.device)).detach()
+#         samples  = self.model(x.to(self.device))
+#         return unet_out, samples
+    
     def inference_step(self, x):
-        with torch.no_grad():
-            unet_out = self.unet(x.to(self.device)).detach()
-        samples  = self.model(x.to(self.device))
+        x = x.to(self.device)
+        batch_size = x.shape[0] // 2
+#         with torch.no_grad():
+#             unet_out = self.unet(x).detach()
+        unet_out, samples = torch.split(self.model(x), batch_size)
+        assert unet_out.shape == samples.shape, "Shapes dont match between unet out and denoised"
         return unet_out, samples
 
 
     def train_epoch(self):
         loss_list, metric_list, batch_sizes = [], [], []
-        for batch in self.train_loader:
-            input_ = batch['input']
+        
+        for it in range(self.num_batches_per_epoch):
+#             batch = next(self.train_loader)
+#             input_ = batch['data']
+            batch = self.train_loader.next()
+            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            
             with autocast():
                 unet_out, samples = self.inference_step(input_)
                 
@@ -121,11 +139,14 @@ class AETrainerCalgary:
         loss_list, metric_list, batch_sizes = [], [], []
         if self.eval_metrics is not None:
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
-        for batch in self.valid_loader:
-            input_ = batch['input']
+            
+        for it in range(self.num_val_batches_per_epoch):
+            batch = self.valid_loader.next()
+            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            
             target = batch['target'].to(self.device)
             unet_out, samples = self.inference_step(input_)
-            
+
             if self.target == 'output':
                 loss, metrics = self.criterion(unet_out, samples, 
                                                self.model.training_data)
@@ -139,6 +160,7 @@ class AETrainerCalgary:
             
             if self.eval_metrics is not None:
                 for key, metric in self.eval_metrics.items():
+                    #print(key, unet_out.shape, samples.shape, target.shape)
                     epoch_metrics[key].append(metric(unet_out, samples, target).mean().detach().cpu())
                     
         average_loss = epoch_average(loss_list, batch_sizes)
@@ -278,7 +300,8 @@ class AETrainerCalgary:
         self.load_model()
         
         
-class AETrainerACDC:
+        
+class AETrainerACDCV2:
     def __init__(
         self, 
         model: nn.Module, 
@@ -297,9 +320,10 @@ class AETrainerACDC:
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None, 
         log: bool = True,
-        debug: bool = False
+        debug: bool = False, 
+        device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ):
-        self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device       = device
         self.model        = model.to(self.device)
         self.unet         = unet.to(self.device)
         self.criterion    = criterion
@@ -334,19 +358,29 @@ class AETrainerACDC:
             assert self.criterion.id_loss in ['ce', 'bce']
 
         
-    def inference_step(self, x):
-        with torch.no_grad():
-            unet_out = self.unet(x.to(self.device)).detach()
-        samples  = self.model(x.to(self.device))
-        return unet_out, samples
+#     def inference_step(self, x):
+#         x = x.to(self.device)
+#         with torch.no_grad():
+#             unet_out = self.unet(x).detach()
+#         samples  = self.model(x)
+#         return unet_out, samples
 
+    def inference_step(self, x):
+        x = x.to(self.device)
+        batch_size = x.shape[0] // 2
+#         with torch.no_grad():
+#             unet_out = self.unet(x).detach()
+        unet_out, samples = torch.split(self.model(x), batch_size)
+        assert unet_out.shape == samples.shape, "Shapes dont match between unet out and denoised"
+        return unet_out, samples
+    
 
     def train_epoch(self):
         loss_list, metric_list, batch_sizes = [], [], []
         
         for it in range(self.num_batches_per_epoch):
-            batch = next(self.train_loader)
-            input_ = batch['data']
+            batch = self.train_loader.next()
+            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
             input_ = self.crop(input_)
 
             with autocast():
@@ -357,8 +391,12 @@ class AETrainerACDC:
                                                   self.model.training_data)
                 elif self.target == 'gt':
                     # take only first element from targets. Others are for multi scale supervision
-                    target = batch['target'][0].long().cuda()
-                    target = F.one_hot(target).squeeze(1).permute(0,3,1,2)
+                    #target = batch['target'][0].long().cuda()
+                    #target = torch.cat([batch['target_orig'], batch['target'][0]], dim=0)
+                    target = batch['target']
+                    target = target.long().to(self.device)
+                    target[target == -1] = 0
+                    target = F.one_hot(target, num_classes=4).squeeze(1).permute(0,3,1,2)
                     target = self.crop(target)
                     loss, metrics = self.criterion(target.to(self.device), samples, 
                                                    self.model.training_data)
@@ -395,23 +433,37 @@ class AETrainerACDC:
         if self.eval_metrics is not None:
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for it in range(self.num_val_batches_per_epoch):
-            batch = next(self.valid_loader)
-            input_ = batch['data']
+            batch = self.valid_loader.next()
+            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
             input_ = self.crop(input_)
-
+            #print(input_.shape)
+            #print(batch['target_orig'].shape, batch['target'].shape)
+#             for ele in batch['target_orig']:
+#                 print(ele.shape)
             # take only first element from targets. Others are for multi scale supervision
-            target = batch['target'][0].long().cuda()
-            target = F.one_hot(target).squeeze(1).permute(0,3,1,2)
+            #target = torch.cat([batch['target_orig'], batch['target']], dim=0)
+            target = batch['target']
+            target = target.long().to(self.device)
+            #print("target -1", target.min())
+            target[target == -1] = 0
+            target = F.one_hot(target, num_classes=4).squeeze(1).permute(0,3,1,2)
             target = self.crop(target)
+            #print(target.shape, input_.get_device())
 
             unet_out, samples = self.inference_step(input_)
-                        
+             
+            #print(unet_out.shape, samples.shape)
             if self.target == 'output':
-                loss, metrics = self.criterion(unet_out, samples, 
-                                               self.model.training_data)
+                loss, metrics = self.criterion(
+                    unet_out, 
+                    samples, 
+                    self.model.training_data)
+                
             elif self.target == 'gt':
-                loss, metrics = self.criterion(target.to(self.device), samples, 
-                                   self.model.training_data)
+                loss, metrics = self.criterion(
+                    target.to(self.device), 
+                    samples, 
+                    self.model.training_data)
 
             loss_list.append(loss.item())
             metric_list.append(metrics)
@@ -419,11 +471,12 @@ class AETrainerACDC:
             
             if self.eval_metrics is not None:
                 for key, metric in self.eval_metrics.items():
+                    #print(unet_out.shape, samples.shape, target.shape)
                     epoch_metrics[key].append(metric(unet_out, samples, target).mean().detach().cpu())
         
 #         print("hi")
 #         print(batch_sizes)
-#         print("eval before avrg", metrics['output_diff'], batch_sizes)       
+#         print("eval before avrg", metrics['output_diff'], batch_sizes)
         average_loss = epoch_average(loss_list, batch_sizes)
         metrics      = average_metrics(metric_list, batch_sizes)
 #         print("eval after avrg", metrics['output_diff'])
@@ -563,6 +616,7 @@ class AETrainerACDC:
         if not self.debug:
             self.save_hist()
         self.load_model()
+
         
         
         
