@@ -10,8 +10,10 @@ from typing import (
 import random
 import torch
 from torch import Tensor
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import functional as F, InterpolationMode
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances_argmin_min
 from batchgenerators.dataloading.data_loader import SlimDataLoaderBase
 from batchgenerators.transforms.spatial_transforms import (
     SpatialTransform, 
@@ -144,7 +146,6 @@ class Transforms(object):
     def __init__(
         self,
     ) -> None:
-        self.transforms = {}
         
         io_transforms = [
             RemoveLabelTransform(
@@ -162,10 +163,7 @@ class Transforms(object):
                 keys = ['data', 'target'], 
                 cast_to = 'float')    
         ]
-        self.transforms[
-            'io_transforms'
-        ] = io_transforms
-        
+       
         global_nonspatial_transforms = [
             SimulateLowResolutionTransform(
                 order_upsample = 3, 
@@ -186,10 +184,7 @@ class Transforms(object):
                 per_channel = False
             ),
         ] 
-        self.transforms[
-            'global_nonspatial_transforms'
-        ] = global_nonspatial_transforms + io_transforms
-        
+       
         global_transforms = [
             SpatialTransform(
                 independent_scale_for_each_axis = False, 
@@ -264,41 +259,44 @@ class Transforms(object):
                 label_key = 'seg', 
                 axes = (0, 1)
             ),
-        ] 
-        self.transforms[
-            'global_transforms'
-        ] = global_transforms + io_transforms
+        ]       
+        
         
         local_transforms = [
             BrightnessGradientAdditiveTransform(
-                scale=scale, 
+                scale=200, 
                 max_strength=4, 
                 p_per_sample=0.2, 
                 p_per_channel=1
             ),
             LocalGammaTransform(
-                scale=scale, 
+                scale=200, 
                 gamma=(2, 5), 
                 p_per_sample=0.2,
                 p_per_channel=1
             ),
             LocalSmoothingTransform(
-                scale=scale,
+                scale=200,
                 smoothing_strength=(0.5, 1),
                 p_per_sample=0.2,
                 p_per_channel=1
             ),
             LocalContrastTransform(
-                scale=scale,
+                scale=200,
                 new_contrast=(1, 3),
                 p_per_sample=0.2,
                 p_per_channel=1
             ),
         ]
-        self.transforms[
-            'local_transforms'
-        ] = global_nonspatial_transforms + local_transforms + io_transforms
         
+        self.transforms = {
+            'io_transforms': io_transforms,
+            'global_nonspatial_transforms': global_nonspatial_transforms + io_transforms,
+            'global_transforms': global_transforms + io_transforms,
+            'local_transforms': global_nonspatial_transforms + local_transforms + io_transforms,
+        }
+
+
     def get_transforms(
         self, 
         arg: str
@@ -527,3 +525,103 @@ class RandAugmentWithLabels(torch.nn.Module):
             f")"
         )
         return s
+
+        
+def volume_collate(batch: List[dict]) -> dict:
+    return batch[0]
+
+        
+def slice_selection(
+    dataset: Dataset, 
+    indices: Tensor,
+    n_cases: int = 10
+) -> Tensor:
+    
+    slices = dataset.__getitem__(indices)['input']
+    kmeans_in = slices.reshape(len(indices), -1)
+    kmeans = KMeans(n_clusters=n_cases).fit(kmeans_in)
+    idx, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, kmeans_in)
+    return indices[idx]
+
+
+def dataset_from_indices(
+    dataset: Dataset, 
+    indices: Tensor
+) -> DataLoader:
+    
+    data = dataset.__getitem__(indices)
+    
+    class CustomDataset(Dataset):
+        
+        def __init__(self, input: Tensor, labels: Tensor, 
+                     voxel_dim: Tensor):
+            self.input = input
+            self.labels = labels
+            self.voxel_dim = voxel_dim
+            
+        def __getitem__(self, idx):
+            return {'input': self.input[idx],
+                    'target': self.labels[idx],
+                    'voxel_dim': self.voxel_dim[idx]}
+        
+        def __len__(self):
+            return self.input.size(0)
+        
+    return CustomDataset(*data.values())
+
+
+@torch.no_grad()
+def get_subset(
+    dataset: Dataset,
+    model: UNet2D,
+    criterion: nn.Module,
+    device: str = 'cuda:0',
+    fraction: float = 0.1, 
+    n_cases: int = 10, 
+    part: str = "tail",
+    batch_size: int = 1
+) -> Dataset:
+    """Selects a subset of the otherwise very large CC-359 Dataset, which
+        - is in the bottom/top fraction w.r.t. to a criterion and model
+        - contains n_cases, drawn to be divers w.r.t. to the input space and
+          defined as k_means cluster centers, one for each case.
+    """
+    # TODO: cache subset indices for subsequent runs. Cache based on all
+    # factors that influence selection, i.e. model, criterion, function params etc
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=False,
+        drop_last=False
+    )
+    
+    # collect evaluation per slice and cache
+    assert criterion.reduction == 'none'
+    model.eval()
+    loss_list = []
+    for batch in dataloader:
+        input_  = batch['input'].to(device)
+        target  = batch['target'].to(device)
+        net_out = model(input_)
+        loss    = criterion(net_out, target).view(input_.shape[0], -1).mean(1)
+        loss_list.append(loss)
+        
+    loss_tensor = torch.cat(loss_list)
+    assert len(loss_tensor.shape) == 1
+    
+    # get indices from loss function values
+    indices = torch.argsort(loss_tensor, descending=True)
+    # set some params for slicing
+    len_ = len(dataset)
+    devisor = int(1 / fraction)
+    # Chunk dataset for either tail or head part based on func args
+    if part == 'tail':
+        indices = indices[:len_ // devisor]
+    elif part == 'head':
+        indices = indices[-len_ // devisor:]   
+    # select slices within fraction of dataset based on kmeans
+    indices_selection = slice_selection(dataset, indices, n_cases=n_cases)
+    # build dataset from selected slices and return
+    subset = dataset_from_indices(dataset, indices_selection)
+
+    return subset
