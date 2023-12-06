@@ -15,8 +15,16 @@ import wandb
 from tqdm.auto import tqdm
 import numpy as np
 from dataset import CalgaryCampinasDataset
-from utils import EarlyStopping, epoch_average, slice_selection, dataset_from_indices, volume_collate
+from utils import (
+    EarlyStopping, 
+    epoch_average, 
 
+)
+from data_utils import (
+    slice_selection, 
+    dataset_from_indices,
+    volume_collate
+)
 
 class UNetTrainerCalgary():
     def __init__(
@@ -278,37 +286,7 @@ class UNetTrainerCalgary():
             
         return metrics
     
-    
-    @torch.no_grad()
-    def get_subset(self, dataloader: DataLoader, fraction=0.1, n_cases=10, part="tail") -> DataLoader:
-        assert dataloader.batch_size == 1
-        self.model.eval()
-        loss_list = []
-        for batch in dataloader:
-            input_  = batch['input'].to(self.device)
-            target  = batch['target'].to(self.device)
-            net_out = self.inference_step(input_)
-            loss    = self.criterion(net_out, target)
-            loss_list.append(loss.item())
-            
-        loss_tensor = torch.tensor(loss_list)
-        indices = torch.argsort(loss_tensor, descending=True)
-        len_ = len(loss_list)
-        
-        devisor = int(1 / fraction)
-        
-        if part == 'tail':
-            indices = indices[:len_ // devisor]
-        elif part == 'head':
-            indices = indices[-len_ // devisor:]   
-            
-        indices_selection = slice_selection(dataloader.dataset, indices, n_cases=n_cases)
-        subset            = dataset_from_indices(dataloader.dataset, indices_selection)
-        
-        return subset
-    
 
-    
     def plot_history(self):
         plt.style.use('seaborn')
         fig, ax = plt.subplots(1,2)
