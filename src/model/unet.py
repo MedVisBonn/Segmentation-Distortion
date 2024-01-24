@@ -5,11 +5,37 @@ https://arxiv.org/pdf/2008.07357.pdf
 https://github.com/kechua/DART20/blob/master/damri/model/unet.py
 """
 
-from typing import Iterable, Dict, Callable, Tuple, List
+from typing import (
+    Dict, 
+    Tuple, 
+    List, 
+    Union
+)
+from omegaconf import OmegaConf
 import torch
 from torch import nn
 from dpipe.layers.resblock import ResBlock2d
 from dpipe.layers.conv import PreActivation2d
+
+
+
+def get_unet(
+    unet_cfg: OmegaConf, 
+    return_state_dict=False
+) -> Union[nn.Module, Tuple[nn.Module, Dict]]:
+    unet = UNet2D(
+        n_chans_in=unet_cfg.n_chans_in, 
+        n_chans_out=unet_cfg.n_chans_out, 
+        n_filters_init=unet_cfg.n_filters_init
+    )
+    if return_state_dict:
+        unet_name = unet_cfg.pre + str(unet_cfg.iteration)
+        model_path = f'{unet_cfg.root}pre-trained/trained_UNets/{unet_name}_best.pt'
+        state_dict = torch.load(model_path)['model_state_dict']
+
+        return unet, state_dict
+    else:
+        return unet
 
 
 class UNet2D(nn.Module):

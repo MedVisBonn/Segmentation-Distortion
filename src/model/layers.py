@@ -47,10 +47,11 @@ class ConvBlock(nn.Module):
                                     stride=1,
                                     padding=padding,
                                 ),
-                                nn.LayerNorm(
-                                    # little hacky, works for stride 1 and 2
-                                    torch.Size([in_channels, in_dim * stride, in_dim * stride])
-                                ),
+#                                 nn.LayerNorm(
+#                                     # little hacky, works for stride 1 and 2
+#                                     torch.Size([in_channels, in_dim * stride, in_dim * stride])
+#                                 ),
+                                nn.BatchNorm2d(in_channels),
                                 nn.LeakyReLU(),
                             ]
                             for _ in range(block_size - 1)
@@ -66,7 +67,8 @@ class ConvBlock(nn.Module):
                     stride=stride,
                     padding=padding,
                 ),
-                nn.LayerNorm(torch.Size([out_channels, in_dim, in_dim])),
+                nn.BatchNorm2d(out_channels),
+#                 nn.LayerNorm(torch.Size([out_channels, in_dim, in_dim])),
                 nn.LeakyReLU(),
             )
 
@@ -89,9 +91,10 @@ class ConvBlock(nn.Module):
                                     padding=padding,
                                     output_padding=0,
                                 ),
-                                nn.LayerNorm(
-                                    torch.Size([in_channels, in_dim // 2, in_dim // 2])
-                                ),
+#                                 nn.LayerNorm(
+#                                     torch.Size([in_channels, in_dim // 2, in_dim // 2])
+#                                 ),
+                                nn.BatchNorm2d(in_channels),
                                 nn.LeakyReLU(),
                             ]
                             for _ in range(block_size - 1)
@@ -108,7 +111,8 @@ class ConvBlock(nn.Module):
                     padding=padding,
                     output_padding=output_padding,
                 ),
-                nn.LayerNorm(torch.Size([out_channels, in_dim, in_dim])),
+#                 nn.LayerNorm(torch.Size([out_channels, in_dim, in_dim])),
+                nn.BatchNorm2d(out_channels),
                 nn.LeakyReLU(),
             )
 

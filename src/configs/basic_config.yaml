@@ -1,0 +1,44 @@
+# basic yaml file with configuration that rarely changes
+
+debug: False
+wandb: 
+    log: True
+    project: 'MICCAI2023-extension'
+fs: 
+    root: '../../'
+data: 
+    brain: 
+        data_path: 'data/conp-dataset/projects/calgary-campinas/CC359/Reconstructed/'
+    heart: 
+        data_path: 'data/mnm/'
+model: 
+    unet: 
+        brain: 
+            pre: 'calgary_unet'
+            n_chans_in: 1
+            n_filters_init: 8
+            n_chans_out: 1
+            training: 
+                save_loc: 'pre-trained'
+                train_site: 6
+                augment: True
+                validation: True
+                batch_size: 32
+                epochs: 250
+                patience: 4
+                lr: 0.001
+        heart: 
+            pre: 'acdc_unet8_'
+            n_chans_in: 1
+            n_filters_init: 8
+            n_chans_out: 4
+            training: 
+                save_loc: 'pre-trained'
+                augment: True
+                validation: True
+                batch_size: 32
+                num_batches_per_epoch: 250
+                num_val_batches_per_epoch: 50
+                epochs: 250
+                patience: 4
+                lr: 0.001

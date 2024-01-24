@@ -8,8 +8,10 @@ from typing import (
     Dict
 )
 import random
+from omegaconf import OmegaConf
 import torch
 from torch import Tensor
+from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import functional as F, InterpolationMode
 from sklearn.cluster import KMeans
@@ -42,6 +44,9 @@ from batchgenerators.transforms.abstract_transforms import (
     Compose,
     AbstractTransform
 )
+from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
+
+from dataset import *
 
 
 
@@ -62,7 +67,7 @@ class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
     
     def generate_train_batch(self):
         # select single slice from dataset
-        data = self._data[randrange(len(self._data))]
+        data = self._data[random.randrange(len(self._data))]
         # split into input and target, cast to np.float for batchgenerators
         img = data['input'].numpy().astype(np.float32)
         tar = data['target'][0].numpy().astype(np.float32)
@@ -105,6 +110,7 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         # split into input and target
         img    = data['input']
         tar    = data['target']
+        
         #construct the dictionary and return it. np.float32 cast because most networks take float
         out = {'data': img.numpy().astype(np.float32), 
                'seg':  tar.numpy().astype(np.float32)}
@@ -154,12 +160,12 @@ class Transforms(object):
                 replace_with = 0,
                 remove_label = -1
             ),
-           RenameTransform(
+            RenameTransform(
                 delete_old = True,
                 out_key = 'target',
                 in_key = 'seg'
             ),
-           NumpyToTensor(
+            NumpyToTensor(
                 keys = ['data', 'target'], 
                 cast_to = 'float')    
         ]
@@ -294,6 +300,8 @@ class Transforms(object):
             'global_nonspatial_transforms': global_nonspatial_transforms + io_transforms,
             'global_transforms': global_transforms + io_transforms,
             'local_transforms': global_nonspatial_transforms + local_transforms + io_transforms,
+            'local_val_transforms': local_transforms + io_transforms,
+            'all_transforms': local_transforms + global_transforms + io_transforms,
         }
 
 
@@ -534,10 +542,17 @@ def volume_collate(batch: List[dict]) -> dict:
 def slice_selection(
     dataset: Dataset, 
     indices: Tensor,
-    n_cases: int = 10
+    n_cases: int = 10,
+    verbose: bool = False
 ) -> Tensor:
     
     slices = dataset.__getitem__(indices)['input']
+    if n_cases > len(slices):
+        if verbose:
+            print(f"Number of cases ({n_cases}) is larger than number of data points ({len(slices)}). Setting n_classes = len(slices)")
+        n_cases = len(slices)
+
+    
     kmeans_in = slices.reshape(len(indices), -1)
     kmeans = KMeans(n_clusters=n_cases).fit(kmeans_in)
     idx, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, kmeans_in)
@@ -573,13 +588,14 @@ def dataset_from_indices(
 @torch.no_grad()
 def get_subset(
     dataset: Dataset,
-    model: UNet2D,
+    model: nn.Module,
     criterion: nn.Module,
     device: str = 'cuda:0',
     fraction: float = 0.1, 
     n_cases: int = 10, 
     part: str = "tail",
-    batch_size: int = 1
+    batch_size: int = 1,
+    verbose: bool = False
 ) -> Dataset:
     """Selects a subset of the otherwise very large CC-359 Dataset, which
         - is in the bottom/top fraction w.r.t. to a criterion and model
@@ -594,6 +610,10 @@ def get_subset(
         shuffle=False,
         drop_last=False
     )
+    
+#     if n_cases < len(dataset):
+#         print("n_cases > len(dataset). Setting n_cases = len(dataset)")
+#         n_cases = len(dataset)
     
     # collect evaluation per slice and cache
     assert criterion.reduction == 'none'
@@ -612,7 +632,7 @@ def get_subset(
     # get indices from loss function values
     indices = torch.argsort(loss_tensor, descending=True)
     # set some params for slicing
-    len_ = len(dataset)
+    len_    = len(dataset)
     devisor = int(1 / fraction)
     # Chunk dataset for either tail or head part based on func args
     if part == 'tail':
@@ -620,8 +640,190 @@ def get_subset(
     elif part == 'head':
         indices = indices[-len_ // devisor:]   
     # select slices within fraction of dataset based on kmeans
-    indices_selection = slice_selection(dataset, indices, n_cases=n_cases)
+    indices_selection = slice_selection(
+        dataset,
+        indices, 
+        n_cases=n_cases,
+        verbose=verbose
+    )
     # build dataset from selected slices and return
     subset = dataset_from_indices(dataset, indices_selection)
 
     return subset
+
+
+
+def get_train_loader(
+    training: str,
+    cfg: OmegaConf
+):
+    """ Instantiates dataloaders for either Calgary-Campinas or ACDC dataset.
+
+    Args:
+        training (str): Either 'unet' or 'dae'
+        cfg (OmegaConf): data config. 
+            Contains the task specific data paths and the task_key.
+
+    Returns:
+        train_loader (MultiThreadedAugmenter): Training data generator.
+        val_loader (MultiThreadedAugmenter): Validation data generator.
+    """
+
+    if cfg.run.task_key == 'brain':
+        train_loader, val_loader = get_brain_train_loader(training=training, cfg=cfg)
+    elif cfg.run.task_key == 'heart':
+        train_loader, val_loader = get_heart_train_loader(training=training, cfg=cfg)
+    else:
+        raise ValueError(f"Unknown task {cfg.run.task_key}. Task key must be either 'brain' or 'heart'")
+    return train_loader, val_loader
+
+
+
+def get_brain_train_loader(
+    training: str, # unet or dae
+    cfg: OmegaConf
+):
+    """ Instantiates dataloaders for Calgary-Campinas dataset.
+
+    Args:
+        training (str): Either 'unet' or 'dae'
+        cfg (OmegaConf): data config. For details see wrapper class.
+
+    Returns:
+        train_gen (MultiThreadedAugmenter): Training data generator.
+        valid_gen (MultiThreadedAugmenter): Validation data generator.
+    """
+
+    return_orig = True if training == 'dae' else False
+    transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
+    
+    data_path = cfg.fs.root + cfg.data.brain.data_path
+    model_cfg = cfg.model.unet.brain
+    
+    train_set = CalgaryCampinasDataset(
+        data_path=data_path, 
+        site=model_cfg.training.train_site,
+        augment=False, 
+        normalize=True, 
+        split='train', 
+        debug=cfg.debug
+    )
+    
+    train_loader = MultiImageSingleViewDataLoader(
+        data=train_set, 
+        batch_size=model_cfg.training.batch_size,
+        return_orig=return_orig
+    )
+    
+    transforms = Transforms()
+    train_augmentor = transforms.get_transforms(transform_key)
+    train_gen = MultiThreadedAugmenter(
+        data_loader = train_loader, 
+        transform = train_augmentor, 
+        num_processes = 4, 
+        num_cached_per_queue = 2, 
+        seeds=None
+    )
+    
+    if training == 'unet':
+        valid_set = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=model_cfg.training.train_site,
+            normalize=True, 
+            volume_wise=True,
+            split='validation'
+        )
+
+        valid_gen = DataLoader(
+            valid_set, 
+            batch_size=1,
+            shuffle=False, 
+            drop_last=False, 
+            collate_fn=volume_collate
+        )
+        
+    elif training == 'dae':
+        valid_set = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=model_cfg.training.train_site,
+            augment=False, 
+            normalize=True, 
+            split='validation', 
+            debug=cfg.debug
+        )
+
+        valid_augmentor = transforms.get_transforms('local_val_transforms')
+        valid_loader = MultiImageSingleViewDataLoader(
+            valid_set,
+            batch_size=model_cfg.training.batch_size,
+            return_orig=True
+        )
+        valid_gen = MultiThreadedAugmenter(
+            data_loader = valid_loader, 
+            transform = valid_augmentor, 
+            num_processes = 4, 
+            num_cached_per_queue = 2, 
+            seeds=None
+        )
+    
+    return train_gen, valid_gen
+
+
+def get_heart_train_loader(
+    training: str,
+    cfg: OmegaConf
+):
+    """ Instantiates dataloaders for ACDC dataset.
+    
+    Args:
+        training (str): Either 'unet' or 'dae'
+        cfg (OmegaConf): data config. For details see wrapper class.
+
+    Returns:
+        train_gen (MultiThreadedAugmenter): Training data generator.
+        valid_gen (MultiThreadedAugmenter): Validation data generator.
+    """
+    
+    return_orig = True if training == 'dae' else False
+    transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
+    
+    model_cfg = cfg.model.unet.heart
+    
+    transforms = Transforms()
+    train_set = ACDCDataset(
+        data="train",
+        debug=cfg.debug
+    )
+    train_loader = MultiImageSingleViewDataLoader(
+        data=train_set,
+        batch_size=model_cfg.training.batch_size,
+        return_orig=return_orig
+    )    
+    train_augmentor = transforms.get_transforms(transform_key)
+    train_gen = MultiThreadedAugmenter(
+        data_loader = train_loader,
+        transform = train_augmentor,
+        num_processes = 4,
+        num_cached_per_queue = 2,
+        seeds=None
+    )
+    
+    val_set = ACDCDataset(
+        data="val",
+        debug=cfg['debug']
+    )
+    valid_loader = MultiImageSingleViewDataLoader(
+        data=val_set, 
+        batch_size=model_cfg.training.batch_size,
+        return_orig=return_orig
+    )
+    valid_augmentor = transforms.get_transforms('io_transforms')
+    valid_gen = MultiThreadedAugmenter(
+        data_loader = valid_loader, 
+        transform = valid_augmentor, 
+        num_processes = 4, 
+        num_cached_per_queue = 2, 
+        seeds=None
+    )
+    
+    return train_gen, valid_gen

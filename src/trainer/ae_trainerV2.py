@@ -2,19 +2,32 @@ import os, sys
 import time
 import numpy as np
 import torch
-from torch import Tensor, nn
-from torch.utils.data import Dataset, DataLoader
-from torch import optim
+from torch import nn
+from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.cuda.amp import autocast, GradScaler
 import torch.nn.functional as F
-from torchvision.transforms import Resize, CenterCrop
-from typing import Iterable, Dict, Callable, Tuple
+from torchvision.transforms import CenterCrop
+from typing import Dict, Callable
 import matplotlib.pyplot as plt
-
 import wandb
 from tqdm.auto import tqdm
-from utils import EarlyStopping, epoch_average, average_metrics
+
+
+sys.path.append('..')
+from utils import (
+    EarlyStopping, 
+    epoch_average, 
+    average_metrics
+)
+from model.wrapper import FrankensteinV2
+from losses import (
+    CalgaryCriterionAE, 
+    MNMCriterionAE,
+    SampleDice, 
+    UnetDice
+)
+
 
 
 class AETrainerCalgaryV2:
@@ -300,7 +313,7 @@ class AETrainerCalgaryV2:
         self.load_model()
         
         
-        
+    
 class AETrainerACDCV2:
     def __init__(
         self, 
@@ -457,13 +470,15 @@ class AETrainerACDCV2:
                 loss, metrics = self.criterion(
                     unet_out, 
                     samples, 
-                    self.model.training_data)
+                    self.model.training_data
+                )
                 
             elif self.target == 'gt':
                 loss, metrics = self.criterion(
                     target.to(self.device), 
                     samples, 
-                    self.model.training_data)
+                    self.model.training_data
+                )
 
             loss_list.append(loss.item())
             metric_list.append(metrics)
@@ -617,6 +632,125 @@ class AETrainerACDCV2:
             self.save_hist()
         self.load_model()
 
-        
-        
-        
+
+def get_dae_trainer(
+    dae_config,
+    daes,
+    model,
+    train_loader,
+    val_loader
+):
+    if dae_config.task_key == 'brain':
+        return get_dae_brain_trainer(
+            dae_config=dae_config, 
+            daes=daes, 
+            model=model, 
+            train_loader=train_loader, 
+            val_loader=val_loader
+        )
+    elif dae_config.task_key == 'heart':
+        return get_dae_heart_trainer(
+            dae_config=dae_config, 
+            daes=daes, 
+            model=model, 
+            train_loader=train_loader, 
+            val_loader=val_loader
+        )
+    else:
+        raise ValueError(f"Unknown task_key {dae_config.task_key}")
+
+
+def get_dae_brain_trainer(
+    dae_config, 
+    daes, 
+    model, 
+    train_loader, 
+    val_loader 
+):
+    
+    wrapper = FrankensteinV2(
+        seg_model=model,
+        transformations=daes,
+        disabled_ids=dae_config.disabled_ids,
+        copy=True
+    )
+
+    criterion = CalgaryCriterionAE(
+        loss=dae_config.loss, 
+        recon=dae_config.reconstruction, 
+        diff=dae_config.difference
+    )
+
+    eval_metrics = {
+        'Sample Volumetric Dice': SampleDice(data='calgary'),
+        'UNet Volumetric Dice': UnetDice(data='calgary')
+    }
+
+    trainer = AETrainerCalgaryV2(
+        model=wrapper, 
+        unet=model, 
+        criterion=criterion,
+        train_loader=train_loader, 
+        valid_loader=val_loader,
+        num_batches_per_epoch=dae_config.num_batches_per_epoch,
+        num_val_batches_per_epoch=dae_config.num_val_batches_per_epoch,
+        root=dae_config.root,
+        target=dae_config.target,
+        description=f'{dae_config.task_key}_{dae_config.name}',
+        lr=dae_config.lr, 
+        eval_metrics=eval_metrics, 
+        log=dae_config.log,
+        n_epochs=250, 
+        patience=8
+    )
+
+    return trainer
+
+
+def get_dae_heart_trainer(
+    dae_config, 
+    daes, 
+    model, 
+    train_loader, 
+    val_loader
+):
+
+    wrapper = FrankensteinV2(
+        seg_model=model,
+        transformations=daes,
+        disabled_ids=dae_config.disabled_ids,
+        copy=True
+    )
+
+    criterion = MNMCriterionAE(
+        loss=dae_config.loss, 
+        recon=dae_config.reconstruction, 
+        diff=dae_config.difference
+    )
+
+    eval_metrics = {
+        'Sample Volumetric Dice': SampleDice(data='MNM'),
+        'UNet Volumetric Dice': UnetDice(data='MNM')
+    }
+
+
+    trainer = AETrainerACDCV2(
+        model=wrapper, 
+        unet=model, 
+        criterion=criterion, 
+        train_loader=train_loader, 
+        valid_loader=val_loader,
+        num_batches_per_epoch=dae_config.num_batches_per_epoch,
+        num_val_batches_per_epoch=dae_config.num_val_batches_per_epoch,
+        root=dae_config.root,
+        target=dae_config.target,
+        description=f'{dae_config.task_key}_{dae_config.name}',
+        lr=dae_config.lr, 
+        eval_metrics=eval_metrics, 
+        log=dae_config.log,
+        n_epochs=250, 
+        patience=8,
+        device=torch.device('cuda')
+    )
+
+    return trainer

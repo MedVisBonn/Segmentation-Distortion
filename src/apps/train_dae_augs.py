@@ -36,7 +36,7 @@ from model.dae import AugResDAE
 from model.unet import UNet2D
 from model.wrapper import FrankensteinV2
 from losses import MNMCriterionAE, SampleDice, UnetDice
-from trainer.ae_trainer import AETrainerACDCV2
+from trainer.ae_trainerV2 import AETrainerACDCV2
 
 
 
@@ -48,11 +48,13 @@ def main(args):
         arg = arguments.popleft()
         if arg in ['-i', '--iteration']:
             it = arguments.popleft()
-        
+        if arg in ['--residual']:
+            residual = True if int(arguments.popleft()) == 1 else False
+            print(residual) 
     cfg = {
         'debug': False,
         'log': True,
-        'description': f'acdc_AugResDAE{it}_localAug_multiImgSingleView_res_balanced_same', #'mms_vae_for_nnUNet_fc3_0_bs50',
+        'description': f'acdc_AugResDAE{it}_localAug_multiImgSingleView_{"res" if residual else "recon"}_balanced_same', #'mms_vae_for_nnUNet_fc3_0_bs50',
         'project': 'MICCAI2023-loose_ends',
 
         # Data params
@@ -71,7 +73,11 @@ def main(args):
         'target': 'output', #gt or output
         'reconstruction': True,
         'augmentations': 'local',
-        'disabled_ids': ['shortcut0', 'shortcut1', 'shortcut2'], #['shortcut0', 'shortcut1', 'shortcut2']
+        'disabled_ids': [
+            'shortcut0', 
+            'shortcut1', 
+            'shortcut2'
+        ], #['shortcut0', 'shortcut1', 'shortcut2']
     }
     
     nnUnet_prefix = '../../../nnUNet/'
@@ -99,11 +105,10 @@ def main(args):
     train_loader = trainer.tr_gen
     valid_loader = trainer.val_gen
 
-
-
     if cfg['augmentations'] == 'all':
         train_transforms = [t for t in train_loader.transform.transforms]
         valid_transforms = [t for t in valid_loader.transform.transforms]
+        
     elif cfg['augmentations'] == 'output_invariant':
         data_only_transforms = (
             batchgenerators.transforms.resample_transforms.SimulateLowResolutionTransform,
@@ -148,10 +153,10 @@ def main(args):
 
     train_gen = MultiImageSingleViewDataLoader(train_data, batch_size=cfg['batch_size'], return_orig=True)
     #train_gen = SingleThreadedAugmenter(train_gen, train_augmentor)
-    train_gen = MultiThreadedAugmenter(train_gen, train_augmentor, 1, 1, seeds=None)
+    train_gen = MultiThreadedAugmenter(train_gen, train_augmentor, 4, 2, seeds=None)
     valid_gen = MultiImageSingleViewDataLoader(valid_data, batch_size=cfg['batch_size'], return_orig=True)
     #valid_gen = SingleThreadedAugmenter(valid_gen, valid_augmentor)
-    valid_gen = MultiThreadedAugmenter(valid_gen, valid_augmentor, 1, 1, seeds=None)
+    valid_gen = MultiThreadedAugmenter(valid_gen, valid_augmentor, 4, 2, seeds=None)
 
 
     ### VAE Params
@@ -184,7 +189,8 @@ def main(args):
                                          in_dim      = dae_map[key][1],
                                          latent_dim  = dae_map[key][2],
                                          depth       = dae_map[key][3],
-                                         block_size  = dae_map[key][4]) for key in dae_map})
+                                         block_size  = dae_map[key][4],
+                                         residual    = residual) for key in dae_map})
 
 
     for layer_id in cfg['disabled_ids']:
@@ -206,26 +212,30 @@ def main(args):
         diff=cfg['difference']
     )
 
-    eval_metrics = {'Sample Volumetric Dice': SampleDice(data='MNM'),
-                    'UNet Volumetric Dice': UnetDice(data='MNM')}
+    eval_metrics = {
+        'Sample Volumetric Dice': SampleDice(data='MNM'),
+        'UNet Volumetric Dice': UnetDice(data='MNM')
+    }
 
 
-    ae_trainer = AETrainerACDCV2(model=model, 
-                                 unet=unet, 
-                                 criterion=criterion, 
-                                 train_loader=train_gen, 
-                                 valid_loader=valid_gen,
-                                 num_batches_per_epoch=trainer.num_batches_per_epoch,
-                                 num_val_batches_per_epoch=trainer.num_val_batches_per_epoch,
-                                 root=root,
-                                 target=cfg['target'],
-                                 description=description,
-                                 lr=cfg['lr'], 
-                                 eval_metrics=eval_metrics, 
-                                 log=cfg['log'],
-                                 n_epochs=250, 
-                                 patience=8,
-                                 device=torch.device('cuda'))
+    ae_trainer = AETrainerACDCV2(
+        model=model, 
+        unet=unet, 
+        criterion=criterion, 
+        train_loader=train_gen, 
+        valid_loader=valid_gen,
+        num_batches_per_epoch=trainer.num_batches_per_epoch,
+        num_val_batches_per_epoch=trainer.num_val_batches_per_epoch,
+        root=root,
+        target=cfg['target'],
+        description=description,
+        lr=cfg['lr'], 
+        eval_metrics=eval_metrics, 
+        log=cfg['log'],
+        n_epochs=250, 
+        patience=8,
+        device=torch.device('cuda')
+    )
 
     ae_trainer.fit()
     

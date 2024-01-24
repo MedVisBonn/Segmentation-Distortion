@@ -1,17 +1,35 @@
-from typing import Iterable, Dict, Callable, Tuple, Union, List
+from typing import (
+    Iterable,
+    Dict, 
+    Callable, 
+    Tuple, 
+    Union, 
+    List
+)
 import wandb
 import numpy as np
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from utils import _activate_dropout, UMapGenerator, Thresholder, Metrics
+from utils import (
+    _activate_dropout, 
+    UMapGenerator, 
+    Thresholder,
+    Metrics
+)
 
             
 @torch.no_grad()
-def get_metrics_from_vaes(model: nn.Module, dataloader: DataLoader, 
-                          net_out: str, n_samples: int = 10, n_taus: int = 1000,
-                          method='ae', device='cuda:0') -> Metrics:
+def get_metrics_from_aes(
+    model: nn.Module, 
+    dataloader: DataLoader, 
+    net_out: str, 
+    n_samples: int = 10, 
+    n_taus: int = 1000,
+    method='cross_entropy', 
+    device='cuda:0'
+) -> Metrics:
     """
     Calculate, collect and post-process evaluation metrics for VAE-Based uncertainty estimation.
     
@@ -28,13 +46,12 @@ def get_metrics_from_vaes(model: nn.Module, dataloader: DataLoader,
     model.eval()
     model.freeze_seg_model()
 
-    len_        = dataloader.dataset.__len__()
+    len_        = len(dataloader.dataset)
     bs          = dataloader.batch_size        
     gen_umap    = UMapGenerator(method=method, net_out=net_out).to(device)
     metrics     = Metrics(n_taus)
     umaps       = []
     errmaps     = []
-    
     
     for _, batch in enumerate(dataloader):
 
@@ -49,15 +66,8 @@ def get_metrics_from_vaes(model: nn.Module, dataloader: DataLoader,
 
         elif net_out == 'mms':
             segmap = torch.argmax(output[:1], dim=1, keepdims=True)
-            #print(segmap.shape, gt.shape)
             errmap = (gt != segmap).float()
-            #print(segmap.shape, gt.shape)
             #errmap = (torch.argmax(gt, dim=1, keepdims=True) != segmap).float()
-            #print(errmap.shape, gen_umap(output).shape)
-        
-        #print('out', output.shape)
-        #print('umap', gen_umap(output).shape)
-        #print('err', errmap.sum())
         umaps.append(gen_umap(output).cpu())
         errmaps.append(errmap.cpu())
         
@@ -79,9 +89,13 @@ def get_metrics_from_vaes(model: nn.Module, dataloader: DataLoader,
 
 
 @torch.no_grad()
-def get_metrics_from_probs(model: nn.Module, dataloader: DataLoader, 
-                           net_out: str, n_taus: int = 1000,
-                           device='cuda:0') -> Metrics:
+def get_metrics_from_probs(
+    model: nn.Module, 
+    dataloader: DataLoader, 
+    net_out: str,
+    n_taus: int = 1000,
+    device='cuda:0'
+) -> Metrics:
     """
     Calculate, collect and post-process evaluation metrics for Entropy-Based uncertainty estimation.
     
@@ -93,13 +107,12 @@ def get_metrics_from_probs(model: nn.Module, dataloader: DataLoader,
     model.to(device)
     model.eval()
         
-    len_        = dataloader.dataset.__len__()
-    gen_umap    = UMapGenerator(method='entropy', net_out=net_out).to(device)
+    len_        = len(dataloader.dataset)
+    gen_umap    = UMapGenerator(method='probs', net_out=net_out).to(device)
     metrics     = Metrics(n_taus)
     
     umaps       = []
     errmaps     = []
-    
     
     for _, batch in enumerate(dataloader):
 
@@ -119,23 +132,16 @@ def get_metrics_from_probs(model: nn.Module, dataloader: DataLoader,
             #errmap = (torch.argmax(gt, dim=1, keepdims=True) != segmap).float()
             errmap = (gt != segmap).float()
             
-            
-        #print('out', output.shape)
         umap = gen_umap(output).cpu()
-        #print('umap', umap.shape)
         umaps.append(umap)
         errmaps.append(errmap.cpu())
-        #print('err', errmap.sum())
         
     umap_values = torch.cat(umaps).flatten()
     taus        = np.quantile(umap_values, torch.linspace(0, 1, n_taus)**(1/8))
     thresholder = Thresholder(torch.from_numpy(taus).view(1, n_taus, 1, 1))   
     
     for umap, errmap in zip(umaps, errmaps):
-        binary_umaps = thresholder(umap)
-        
-        #print(binary_umaps.shape, errmap.shape)
-        
+        binary_umaps = thresholder(umap)        
         metrics.update(binary_umaps, 
                        errmap)    
 
@@ -145,9 +151,15 @@ def get_metrics_from_probs(model: nn.Module, dataloader: DataLoader,
     return metrics
 
 
-def get_metrics_from_dropout(model: nn.Module, dataloader: DataLoader, 
-                             name: str, n_samples: int = 10, n_taus: int = 1000,
-                             net_out: str = 'calgary', log=True, device='cuda:0') -> Metrics:
+def get_metrics_from_dropout(
+    model: nn.Module, 
+    dataloader: DataLoader, 
+    name: str, 
+    n_samples: int = 10,
+    n_taus: int = 1000,
+    net_out: str = 'calgary', 
+    log=True, device='cuda:0'
+) -> Metrics:
     """
     Calculate, collect and post-process evaluation metrics for Entropy-Based uncertainty estimation.
     
@@ -161,7 +173,7 @@ def get_metrics_from_dropout(model: nn.Module, dataloader: DataLoader,
     if log:
         run = wandb.init(reinit=True, name=name, project='Thesis-VAE')
         
-    len_        = dataloader.dataset.__len__()
+    len_        = len(dataloader.dataset)
     gen_umap    = UMapGenerator(method='entropy', net_out=net_out).to(device)
     thresholder = Thresholder(n_taus=n_taus, max_value=10)
     metrics     = Metrics(n_taus)
@@ -195,7 +207,6 @@ def get_metrics_from_dropout(model: nn.Module, dataloader: DataLoader,
             #    samples[i] = torch.sigmoid(output)
             #elif net_out == 'mms':
             #    samples[i] = torch.argmax(output, dim=1, keepdims=True)
-        #print("allclose", torch.allclose(samples[0], samples[1]))
         umap         = gen_umap(samples).cpu()
         binary_umaps = thresholder(umap)
 

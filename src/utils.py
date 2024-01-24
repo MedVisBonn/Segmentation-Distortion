@@ -110,8 +110,8 @@ class UMapGenerator(nn.Module):
         super().__init__()
         self.method  = method
         self.net_out = net_out
-        self.m       = nn.Softmax(dim=1)
-        self.ce      = nn.CrossEntropyLoss(reduction='none')
+        self.m       = nn.Softmax(dim=1) if net_out=='mms' else nn.Sigmoid()
+        self.ce      = nn.CrossEntropyLoss(reduction='none') if net_out=='mms' else nn.BCEWithLogitsLoss(reduction='none')
     
     @torch.no_grad()
     def forward(self, x: Tensor) -> Tensor:
@@ -164,6 +164,9 @@ class UMapGenerator(nn.Module):
             elif self.net_out == 'calgary':
                 x    = torch.sigmoid(x)
                 umap = torch.pow(x[:1] - x[1:], 2).mean(0, keepdim=True)
+#                 umap = self.ce(x[:1] - self.m(x[1:]))
+#                 umap = 
+                
                 
         elif self.method == 'entropy':          
 
@@ -371,7 +374,7 @@ def _activate_dropout(m):
     
 def reject_randomness(manualSeed):
     np.random.seed(manualSeed)
-    rand.seed(manualSeed)
+    random.rand.seed(manualSeed)
     torch.manual_seed(manualSeed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(manualSeed)

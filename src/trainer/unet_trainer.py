@@ -25,6 +25,156 @@ from data_utils import (
     dataset_from_indices,
     volume_collate
 )
+from model.unet import UNet2D
+from losses import (
+    DiceScoreCalgary, 
+    SurfaceDiceCalgary,
+    CrossEntropyTargetArgmax,
+    DiceScoreMMS
+)
+
+
+
+def get_unet_trainer(
+    model_cfg, 
+    train_loader, 
+    val_loader,
+    model
+):
+    """Wrapper function to instantiate a unet trainer for either ACDC or
+    Calgary-Campinas dataset 
+    
+    Args:
+        model_cfg (OmegaConf): model config
+            Contains the task-specific base config for the model and:
+                log
+                debug
+                root
+                task_key
+                iteration
+        train_loader (DataLoader): training data loader
+        val_loader (DataLoader): validation data loader
+        model (nn.Module): (unet) model
+
+    Returns:
+        UNetTrainerACDC or UNetTrainerCalgary: trainer object
+    """
+    if model_cfg.task_key == 'heart':
+        trainer = get_unet_heart_trainer(
+            model_cfg, 
+            train_loader, 
+            val_loader,
+            model
+        )
+
+    elif model_cfg.task_key == 'brain':
+        trainer = get_unet_brain_trainer(
+            model_cfg, 
+            train_loader, 
+            val_loader,
+            model
+        )
+
+    else:
+        raise NotImplementedError
+        
+    return trainer
+
+
+
+def get_unet_heart_trainer(
+    model_cfg, 
+    train_loader, 
+    val_loader,
+    model
+):
+    """Instaintiates trainer for ACDC dataset
+
+    Args:
+        model_cfg (OmegaConf): model config  (see wrapper class for details)
+        train_loader (DataLoader): training data loader
+        val_loader (DataLoader): validation data loader
+        model (nn.Module): (unet) model
+
+    Returns:
+        UNetTrainerACDC: trainer object
+    """
+    # model = UNet2D(
+    #     n_chans_in=model_cfg.n_chans_in, 
+    #     n_chans_out=model_cfg.n_chans_out, 
+    #     n_filters_init=model_cfg.n_filters_init
+    # )
+    criterion    = CrossEntropyTargetArgmax()
+    eval_metrics = {
+        "Volumetric Dice": DiceScoreMMS()
+    } 
+    trainer = UNetTrainerACDC(
+        model=model, 
+        criterion=criterion, 
+        train_loader=train_loader, 
+        val_loader=val_loader,
+        num_batches_per_epoch=model_cfg.training.num_batches_per_epoch,
+        num_val_batches_per_epoch=model_cfg.training.num_val_batches_per_epoch,
+        root=model_cfg.root, 
+        description=model_cfg.pre + str(model_cfg.iteration), 
+        lr=model_cfg.training.lr, 
+        n_epochs=model_cfg.training.epochs, 
+        patience=model_cfg.training.patience, 
+        es_mode='max', 
+        eval_metrics=eval_metrics, 
+        log=model_cfg.log, 
+        save_loc=model_cfg.training.save_loc
+    )
+    
+    return trainer
+
+
+def get_unet_brain_trainer(
+    model_cfg, 
+    train_loader, 
+    val_loader,
+    model
+):
+    """Instaintiates trainer for Calgary-Campinas dataset
+
+    Args:
+        model_cfg (OmegaConf): model config
+        train_loader (DataLoader): training data loader
+        val_loader (DataLoader): validation data loader
+        model (nn.Module): (unet) model
+        
+    Returns:
+        UNetTrainerCalgary: trainer object
+    """
+    # model = UNet2D(
+    #     n_chans_in=model_cfg.n_chans_in, 
+    #     n_chans_out=model_cfg.n_chans_out, 
+    #     n_filters_init=model_cfg.n_filters_init
+    # )
+    criterion = nn.CrossEntropyLoss()
+    eval_metrics = {
+        'Volumetric Dice': DiceScoreCalgary(), 
+        'Surface Dice': SurfaceDiceCalgary()
+    }
+    trainer = UNetTrainerCalgary(
+        model=model, 
+        criterion=criterion, 
+        train_generator=train_loader, 
+        val_loader=val_loader, 
+        root=model_cfg.root, 
+        description=model_cfg.pre + str(model_cfg.iteration), 
+        lr=model_cfg.training.lr, 
+        n_epochs=model_cfg.training.epochs, 
+        patience=model_cfg.training.patience, 
+        es_mode='max', 
+        eval_metrics=eval_metrics, 
+        log=model_cfg.log, 
+        save_loc=model_cfg.training.save_loc
+    )
+    
+    return trainer 
+
+
 
 class UNetTrainerCalgary():
     def __init__(
@@ -32,7 +182,7 @@ class UNetTrainerCalgary():
         model: nn.Module, 
         criterion: Callable, 
         train_generator: DataLoader,
-        valid_loader: DataLoader, 
+        val_loader: DataLoader, 
         root: str, 
         description: str = 'untitled', 
         lr: float = 1e-4, 
@@ -42,13 +192,14 @@ class UNetTrainerCalgary():
         #warm_up=True,
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None,
-        log: bool = True
+        log: bool = True,
+        save_loc: str = 'pre-trained-tmp'
     ):
         self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model        = model.to(self.device)
         self.criterion    = criterion
         self.train_generator = train_generator
-        self.valid_loader = valid_loader 
+        self.val_loader = val_loader 
         self.root         = root
         self.description  = description
         self.lr           = lr
@@ -58,6 +209,7 @@ class UNetTrainerCalgary():
         self.es_mode      = es_mode
         self.eval_metrics = eval_metrics
         self.log          = log
+        self.save_loc     = save_loc
         self.optimizer    = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self.scheduler    = ReduceLROnPlateau(self.optimizer, 'min', patience=self.patience)
         self.es           = EarlyStopping(mode=self.es_mode, patience=2*self.patience)
@@ -78,20 +230,20 @@ class UNetTrainerCalgary():
     
     
     def save_hist(self):
-        if(not os.path.exists(self.root+'pre-trained-tmp/trainer_logs')):
-            os.makedirs(self.root+'pre-trained-tmp/trainer_logs')
-        savepath = f'{self.root}pre-trained-tmp/trainer_logs/{self.description}.npy'
+        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
+            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
+        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
         np.save(savepath, self.history)
         
         return
     
     
     def save_model(self):
-        if(not os.path.exists(self.root+'pre-trained-tmp/trained_UNets')):
-            os.makedirs(self.root+'pre-trained-tmp/trained_UNets')
-        if(not os.path.exists(self.root+'pre-trained-tmp/trainer_logs')):
-            os.makedirs(self.root+'pre-trained-tmp/trainer_logs')
-        savepath = f'{self.root}pre-trained-tmp/trained_UNets/{self.description}_best.pt'
+        if(not os.path.exists(f'{self.root}{self.save_loc}/trained_UNets')):
+            os.makedirs(f'{self.root}{self.save_loc}/trained_UNets')
+        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
+            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
+        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
@@ -102,15 +254,15 @@ class UNetTrainerCalgary():
     
     
     def load_model(self):
-        savepath = f'{self.root}pre-trained-tmp/trained_UNets/{self.description}_best.pt'
+        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.root}pre-trained-tmp/trainer_logs/{self.description}.npy'
+        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
         try:
-            savepath = f'{self.root}results-tmp/unet/metrics_{self.description}.npy'
+            savepath = f'{self.root}results/unet/metrics_{self.description}.npy'
             self.evaluation = np.load(savepath, allow_pickle='TRUE').item()
         except:
             print("No metrics found")
@@ -156,7 +308,7 @@ class UNetTrainerCalgary():
     def get_sample(self, mode: str = 'valid'):
         if mode == 'valid':
             self.model.eval()
-            data, target, _ = next(iter(self.valid_loader)).values()
+            data, target, _ = next(iter(self.val_loader)).values()
             net_out = self.inference_step(data) 
             self.model.train()
         else:
@@ -172,7 +324,7 @@ class UNetTrainerCalgary():
         loss_list, batch_sizes, batch_sizes_chunks = [], [], []
         if self.eval_metrics is not None:
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
-        for batch in self.valid_loader:
+        for batch in self.val_loader:
             input_  = batch['input']
             target  = batch['target']
             #print(input_.shape, target.shape )
@@ -378,7 +530,7 @@ class UNetTrainerACDC():
         model: nn.Module, 
         criterion: Callable, 
         train_loader: DataLoader,
-        valid_loader: DataLoader,
+        val_loader: DataLoader,
         num_batches_per_epoch,
         num_val_batches_per_epoch,
         root: str, 
@@ -390,13 +542,14 @@ class UNetTrainerACDC():
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None,
         log: bool = True,
-        device = 0
+        device = 0,
+        save_loc = 'pre-trained-tmp'
     ):
         self.device       = device
         self.model        = model.to(self.device)
         self.criterion    = criterion
         self.train_loader = train_loader
-        self.valid_loader = valid_loader
+        self.val_loader = val_loader
         self.num_batches_per_epoch = num_batches_per_epoch
         self.num_val_batches_per_epoch = num_val_batches_per_epoch
         self.root         = root
@@ -406,6 +559,7 @@ class UNetTrainerACDC():
         self.patience     = patience
         self.es_mode      = es_mode
         self.eval_metrics = eval_metrics
+        self.save_loc     = save_loc
         self.log          = log
         self.optimizer    = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self.scheduler    = ReduceLROnPlateau(self.optimizer, 'min', patience=self.patience)
@@ -427,20 +581,20 @@ class UNetTrainerACDC():
     
     
     def save_hist(self):
-        if(not os.path.exists(self.root+'pre-trained-tmp/trainer_logs')):
-            os.makedirs(self.root+'pre-trained-tmp/trainer_logs')
-        savepath = f'{self.root}pre-trained-tmp/trainer_logs/{self.description}.npy'
+        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
+            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
+        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
         np.save(savepath, self.history)
         
         return
     
     
     def save_model(self):
-        if(not os.path.exists(self.root+'pre-trained-tmp/trained_UNets')):
-            os.makedirs(self.root+'pre-trained-tmp/trained_UNets')
-        if(not os.path.exists(self.root+'pre-trained-tmp/trainer_logs')):
-            os.makedirs(self.root+'pre-trained-tmp/trainer_logs')
-        savepath = f'{self.root}pre-trained-tmp/trained_UNets/{self.description}_best.pt'
+        if(not os.path.exists(f'{self.root}{self.save_loc}/trained_UNets')):
+            os.makedirs(f'{self.root}{self.save_loc}/trained_UNets')
+        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
+            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
+        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
@@ -451,15 +605,15 @@ class UNetTrainerACDC():
     
     
     def load_model(self):
-        savepath = f'{self.root}pre-trained-tmp/trained_UNets/{self.description}_best.pt'
+        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.root}pre-trained-tmp/trainer_logs/{self.description}.npy'
+        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
         try:
-            savepath = f'{self.root}/results-tmp/unet/metrics_{self.description}.npy'
+            savepath = f'{self.root}results/unet/metrics_{self.description}.npy'
             self.evaluation = np.load(savepath, allow_pickle='TRUE').item()
         except:
             print("No metrics found")
@@ -472,8 +626,8 @@ class UNetTrainerACDC():
         for it in range(self.num_batches_per_epoch):
             batch = next(self.train_loader)
             input_ = batch['data']
-            target = batch['target'][0].long().cuda()
-            target = F.one_hot(target).squeeze(1).permute(0,3,1,2)
+            target = batch['target'].long().cuda()
+            target = F.one_hot(target, num_classes=4).squeeze(1).permute(0,3,1,2)
             self.optimizer.zero_grad()
             with autocast():
                 net_out = self.inference_step(input_)
@@ -502,7 +656,7 @@ class UNetTrainerACDC():
     def get_sample(self, mode: str = 'valid'):
         if mode == 'valid':
             self.model.eval()
-            data, target, _ = next(iter(self.valid_loader)).values()
+            data, target, _ = next(iter(self.val_loader)).values()
             net_out = self.inference_step(data) 
             self.model.train()
         else:
@@ -515,35 +669,40 @@ class UNetTrainerACDC():
     
     @torch.no_grad()
     def eval_epoch(self):
-        loss_list, batch_sizes, batch_sizes_chunks = [], [], []
+        loss_list, batch_sizes = [], []
         if self.eval_metrics is not None:
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for it in range(self.num_val_batches_per_epoch):
-            batch = next(self.valid_loader)
+            batch = next(self.val_loader)
             input_ = batch['data']
-            target = batch['target'][0].long().cuda()
-            target = F.one_hot(target).squeeze(1).permute(0,3,1,2)
-            #print(input_.shape, target.shape )
-            input_chunks  = torch.split(input_, 64, dim=0)
-            target_chunks = torch.split(target, 64, dim=0)
+            target = batch['target'].long().to(self.device)
+            #print(target.shape, input_.shape)
+            target = F.one_hot(target, num_classes=4).squeeze(1).permute(0,3,1,2)
+            #print(target.shape, input_.shape)
+            net_out = self.inference_step(input_)
+            loss_list.append(self.criterion(net_out, target).item())
             batch_sizes.append(input_.shape[0])
-            net_out = []
-            for input_chunk, target_chunk in zip(input_chunks, target_chunks):
-                #print(input_chunk.shape, target_chunk.shape )
-                net_out_chunk = self.inference_step(input_chunk.to(self.device))
-                net_out.append(net_out_chunk.detach().cpu())
-                loss = self.criterion(net_out_chunk, target_chunk.to(self.device))
-                loss_list.append(loss.item())
-                batch_sizes_chunks.append(input_chunk.shape[0])
+            #print(input_.shape, target.shape )
+#             input_chunks  = torch.split(input_, 64, dim=0)
+#             target_chunks = torch.split(target, 64, dim=0)
+#             batch_sizes.append(input_.shape[0])
+#             net_out = []
+#             for input_chunk, target_chunk in zip(input_chunks, target_chunks):
+#                 #print(input_chunk.shape, target_chunk.shape )
+#                 net_out_chunk = self.inference_step(input_chunk.to(self.device))
+#                 net_out.append(net_out_chunk.detach().cpu())
+#                 loss = self.criterion(net_out_chunk, target_chunk.to(self.device))
+#                 loss_list.append(loss.item())
+#                 batch_sizes_chunks.append(input_chunk.shape[0])
             
-            net_out = torch.cat(net_out, dim=0)
-            target = target.cpu()
+#             net_out = torch.cat(net_out, dim=0)
+#             target = target.cpu()
             
             #print(net_out.device, target.device)
             if self.eval_metrics is not None:
                 for key, metric in self.eval_metrics.items():
                     epoch_metrics[key].append(metric(net_out,target).detach().mean().cpu())
-        average_loss = epoch_average(loss_list, batch_sizes_chunks)
+        average_loss = epoch_average(loss_list, batch_sizes)
         self.history['valid loss'].append(average_loss)
         if self.eval_metrics is not None:
             for key, epoch_scores in epoch_metrics.items():

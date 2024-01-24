@@ -354,8 +354,8 @@ class RefineCriterion(nn.Module):
         
     def forward(self, unet_out, samples, train_data, beta):
    
-        loss = torch.tensor(0, device=device).float()
-        
+        loss = torch.tensor(0)
+         
         metrics = {'output_mse': loss.item()}
         
         for layer in train_data:

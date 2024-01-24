@@ -216,7 +216,10 @@ class FrankensteinV2(nn.Module):
         self.training_data = {}
         self.inspect_data = {}
 
-    def hook_train_transformations(self, transformations: Dict[str, nn.Module]) -> None:
+    def hook_train_transformations(
+        self, 
+        transformations: Dict[str, nn.Module]
+    ) -> None:
         for layer_id in transformations:
             layer = self.seg_model.get_submodule(layer_id)
             hook = self._get_train_transformation_hook(
@@ -227,7 +230,8 @@ class FrankensteinV2(nn.Module):
             ] = layer.register_forward_pre_hook(hook)
 
     def hook_transformations(
-        self, transformations: Dict[str, nn.Module], n_samples: int
+        self, transformations: Dict[str, nn.Module], 
+        n_samples: int
     ) -> None:
         for layer_id in transformations:
             layer = self.seg_model.get_submodule(layer_id)

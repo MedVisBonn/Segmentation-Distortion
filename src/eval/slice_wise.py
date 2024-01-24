@@ -600,27 +600,31 @@ class MeanDistSamplesDetector(nn.Module):
                 umap_volume  = []
 
                 for input_chunk in input_:
+                    
                     umap, model_out = self.forward(input_chunk.unsqueeze(0).to(self.device))
                     model_out_volume.append(model_out[:1].detach().cpu())
                     umap_volume.append(umap)
                     
                 model_out = torch.cat(model_out_volume, dim=0)
                 umap = torch.cat(umap_volume, dim=0)
+#                 print(umap.shape, model_out.shape)
             
             if self.net_out == 'mms':
                 target[target == -1] = 0
                 # convert to one-hot encoding
                 target = F.one_hot(target.long(), num_classes=4).squeeze(1).permute(0,3,1,2)
                 umap, model_out = self.forward(input_.to(self.device))
-
-            loss = self.criterion(model_out[:1], target)
+            
+            
+            #print(model_out.shape, target.shape)
+            loss = self.criterion(model_out, target)
             loss = loss.mean().float()
 
-            assert model_out.shape[0] == 2, "Model produces too large outputs"
+#             assert model_out.shape[0] == 2, "Model produces too large outputs"
             score = self.score_fn(
                 umap=umap, 
-                pred=model_out[:1], 
-                pred_r=model_out[1:]
+#                 pred=model_out[:1], 
+#                 pred_r=model_out[1:]
             )
             
             corr_coeff.update(score.cpu().view(1,), 1-loss.view(1,))

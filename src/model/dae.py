@@ -1,6 +1,25 @@
+from omegaconf import OmegaConf
 import torch
 from torch import Tensor, nn
 from model.ae import AE, ChannelAE
+
+
+
+def get_daes(
+    arch: OmegaConf
+) -> nn.Module:
+    daes = nn.ModuleDict({
+        layer: AugResDAE(
+            in_channels = arch[layer].channel, 
+            in_dim      = arch[layer].spatial,
+            latent_dim  = arch[layer].latent,
+            depth       = arch[layer].depth,
+            block_size  = arch[layer].block,
+            residual    = True)
+        for layer in arch
+    })
+
+    return daes
 
 
 class resDAE(nn.Module):

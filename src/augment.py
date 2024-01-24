@@ -416,7 +416,7 @@ class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
     
     def generate_train_batch(self):
         
-        data = self._data[randrange(len(self._data))]
+        data = self._data[random.randrange(len(self._data))]
         img = data['input'].numpy().astype(np.float32)
         tar = data['target'][0].numpy().astype(np.float32)
         
