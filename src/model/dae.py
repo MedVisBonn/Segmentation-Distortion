@@ -9,7 +9,8 @@ from monai.networks.nets import UNet
 
 def get_daes(
     arch: OmegaConf,
-    model: str
+    model: str,
+    disabled_ids: list = []
 )-> nn.ModuleDict:
     if model == 'unet':
         daes = get_unetDAE(arch)
@@ -17,6 +18,9 @@ def get_daes(
         daes = get_channelDAE(arch)
     else:
         raise NotImplementedError(f'Model {model} not implemented.')
+    
+    for layer in disabled_ids:
+        daes[layer] = nn.Identity()
 
     return daes
 

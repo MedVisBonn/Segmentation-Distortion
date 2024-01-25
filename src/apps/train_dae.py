@@ -59,7 +59,8 @@ def main(
     # get dae models
     daes = get_daes(
         arch=cfg.dae.arch, 
-        model=cfg.dae.model
+        model=cfg.dae.model,
+        disabled_ids=cfg.dae.trainer.disabled_ids
     )
 
     # get trainer
