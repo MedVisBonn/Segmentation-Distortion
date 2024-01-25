@@ -42,7 +42,7 @@ def main(
 
     # get model
     task_key = cfg.run.task_key
-    unet_cfg = cfg.model.unet[task_key]
+    unet_cfg = cfg.unet[task_key]
     with open_dict(unet_cfg):
         unet_cfg.log = cfg.wandb.log
         unet_cfg.debug = cfg.debug

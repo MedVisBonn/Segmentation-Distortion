@@ -26,6 +26,8 @@ def main(
     assert cfg.run.name is not None, "No name specified. Add +run.name=foo to program call."
     task_key = cfg.run.task_key
 
+    print(OmegaConf.to_yaml(cfg))
+
     # set up wandb
     if cfg.wandb.log:
         wandb.config = OmegaConf.to_container(
@@ -44,7 +46,7 @@ def main(
     )
 
     # get segmentation model
-    unet_cfg = cfg.model.unet[task_key]
+    unet_cfg = cfg.unet[task_key]
     with open_dict(unet_cfg):
         unet_cfg.iteration = cfg.run.iteration
         unet_cfg.root = cfg.fs.root
@@ -55,20 +57,23 @@ def main(
     unet.load_state_dict(state_dict)
 
     # get dae models
-    dae_config = OmegaConf.load(f'../configs/dae_config.yaml')
-    with open_dict(dae_config):
-        dae_config.log = cfg.wandb.log
-        dae_config.debug = cfg.debug
-        dae_config.root = cfg.fs.root
-        dae_config.task_key = task_key
-        dae_config.iteration = cfg.run.iteration
-        dae_config.name = cfg.run.name
-
-    daes = get_daes(arch=dae_config.arch)
+    daes = get_daes(
+        arch=cfg.dae.arch, 
+        model=cfg.dae.model
+    )
 
     # get trainer
+    trainer_config = cfg.dae.trainer
+    with open_dict(trainer_config):
+        trainer_config.log = cfg.wandb.log
+        trainer_config.debug = cfg.debug
+        trainer_config.root = cfg.fs.root
+        trainer_config.task_key = task_key
+        trainer_config.iteration = cfg.run.iteration
+        trainer_config.name = cfg.run.name
+
     trainer = get_dae_trainer(
-        dae_config=dae_config, 
+        trainer_config=trainer_config, 
         daes=daes, 
         model=unet, 
         train_loader=train_loader, 

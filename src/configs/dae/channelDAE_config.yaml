@@ -1,43 +1,44 @@
 
 # Hyperparams
-batch_size: 32
-augment: False
-difference: True
-reconstruction: True
-loss: huber
-target: output
-lr: 1e-4
-patience: 8
-n_epochs: 250
-num_batches_per_epoch: 250
-num_val_batches_per_epoch: 50
+model: 'channelAE'
 arch:
   shortcut0:
     channel: 8
     spatial: 256
     latent: 256
     depth: 3
-    block: 4
+    block: 1
   shortcut1:
     channel: 16
     spatial: 128
     latent: 256
     depth: 3
-    block: 4
+    block: 01
   shortcut2:
     channel: 32
     spatial: 64
     latent: 256
     depth: 3
-    block: 4
+    block: 1
   up3:
     channel: 64
     spatial: 32
     latent: 256
     depth: 3
-    block: 4
-
-disabled_ids: ['shortcut0', 'shortcut1', 'shortcut2']
+    block: 1
+trainer:
+  batch_size: 32
+  augment: False
+  difference: True
+  reconstruction: True
+  loss: huber
+  target: output
+  lr: 1e-4
+  patience: 8
+  n_epochs: 250
+  num_batches_per_epoch: 250
+  num_val_batches_per_epoch: 50
+  disabled_ids: []
 
 # outputs
 plot_dir: ../experiments/unet/calgary/logs/

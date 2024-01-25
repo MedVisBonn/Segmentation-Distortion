@@ -1,22 +1,52 @@
 from omegaconf import OmegaConf
+from math import log2
 import torch
 from torch import Tensor, nn
 from model.ae import AE, ChannelAE
+from monai.networks.nets import UNet
 
 
 
 def get_daes(
-    arch: OmegaConf
-) -> nn.Module:
+    arch: OmegaConf,
+    model: str
+)-> nn.ModuleDict:
+    if model == 'unet':
+        daes = get_unetDAE(arch)
+    elif model == 'channel':
+        daes = get_channelDAE(arch)
+    else:
+        raise NotImplementedError(f'Model {model} not implemented.')
+
+    return daes
+
+
+def get_unetDAE(
+    arch: OmegaConf,
+) -> nn.ModuleDict:
     daes = nn.ModuleDict({
-        layer: AugResDAE(
+        layer: UnetDAE(
+            in_channels = arch[layer].channel, 
+            num_res_units = arch[layer].num_res_units,
+            residual = True  
+        ) for layer in arch
+    })
+
+    return daes
+
+
+def get_channelDAE(
+    arch: OmegaConf,
+) -> nn.ModuleDict:
+    daes = nn.ModuleDict({
+        layer: ChannelDAE(
             in_channels = arch[layer].channel, 
             in_dim      = arch[layer].spatial,
             latent_dim  = arch[layer].latent,
             depth       = arch[layer].depth,
             block_size  = arch[layer].block,
-            residual    = True)
-        for layer in arch
+            residual    = True
+        ) for layer in arch
     })
 
     return daes
@@ -69,7 +99,7 @@ class resDAE(nn.Module):
             return x
 
         
-class AugResDAE(nn.Module):
+class ChannelDAE(nn.Module):
     """ Residual Denoising Autoencoder (resDAE) for denoising feature maps.
     """
     def __init__(
@@ -80,7 +110,7 @@ class AugResDAE(nn.Module):
         depth: int = 3, 
         latent: str = 'dense', 
         block_size: int = 1,
-        residual: str = True
+        residual: str = True,
     ):
         super().__init__()
         self.on = True
@@ -93,6 +123,54 @@ class AugResDAE(nn.Module):
 #            latent=latent, 
             block_size=block_size,
             residual=True
+        )
+
+    def turn_off(self) -> None:
+        self.on = False
+    
+
+    def turn_on(self) -> None:
+        self.on = True
+    
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.on:
+            ae_out = self.ae(x)
+            if self.residual: 
+                return x + ae_out
+            else:
+                return ae_out
+        else:
+            return x
+        
+
+
+class UnetDAE(nn.Module):
+    """ Residual Denoising Autoencoder (resDAE) for denoising feature maps.
+    """
+    def __init__(
+        self, 
+        in_channels: int, 
+        num_res_units: int = 1,
+        residual: str = True
+    ):
+        super().__init__()
+        self.on = True
+        self.residual = residual
+        
+        # in_channels * 2**i until we reach 256
+        channels = [2**(i+1) for i in range(int(log2(in_channels)), 8)]
+        # stride 2 in each step
+        strides = [2 for _ in range(len(channels)-1)]
+        # monai UNet
+        self.ae = UNet(
+            spatial_dims=2,
+            in_channels=in_channels,
+            out_channels=in_channels,
+            channels=channels,
+            strides=strides,
+            num_res_units=num_res_units, 
+            up_kernel_size=3
         )
         
 
@@ -113,3 +191,4 @@ class AugResDAE(nn.Module):
                 return ae_out
         else:
             return x
+

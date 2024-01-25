@@ -634,34 +634,34 @@ class AETrainerACDCV2:
 
 
 def get_dae_trainer(
-    dae_config,
+    trainer_config,
     daes,
     model,
     train_loader,
     val_loader
 ):
-    if dae_config.task_key == 'brain':
+    if trainer_config.task_key == 'brain':
         return get_dae_brain_trainer(
-            dae_config=dae_config, 
+            trainer_config=trainer_config, 
             daes=daes, 
             model=model, 
             train_loader=train_loader, 
             val_loader=val_loader
         )
-    elif dae_config.task_key == 'heart':
+    elif trainer_config.task_key == 'heart':
         return get_dae_heart_trainer(
-            dae_config=dae_config, 
+            trainer_config=trainer_config, 
             daes=daes, 
             model=model, 
             train_loader=train_loader, 
             val_loader=val_loader
         )
     else:
-        raise ValueError(f"Unknown task_key {dae_config.task_key}")
+        raise ValueError(f"Unknown task_key {trainer_config.task_key}")
 
 
 def get_dae_brain_trainer(
-    dae_config, 
+    trainer_config, 
     daes, 
     model, 
     train_loader, 
@@ -671,14 +671,14 @@ def get_dae_brain_trainer(
     wrapper = FrankensteinV2(
         seg_model=model,
         transformations=daes,
-        disabled_ids=dae_config.disabled_ids,
+        disabled_ids=trainer_config.disabled_ids,
         copy=True
     )
 
     criterion = CalgaryCriterionAE(
-        loss=dae_config.loss, 
-        recon=dae_config.reconstruction, 
-        diff=dae_config.difference
+        loss=trainer_config.loss, 
+        recon=trainer_config.reconstruction, 
+        diff=trainer_config.difference
     )
 
     eval_metrics = {
@@ -692,14 +692,14 @@ def get_dae_brain_trainer(
         criterion=criterion,
         train_loader=train_loader, 
         valid_loader=val_loader,
-        num_batches_per_epoch=dae_config.num_batches_per_epoch,
-        num_val_batches_per_epoch=dae_config.num_val_batches_per_epoch,
-        root=dae_config.root,
-        target=dae_config.target,
-        description=f'{dae_config.task_key}_{dae_config.name}',
-        lr=dae_config.lr, 
+        num_batches_per_epoch=trainer_config.num_batches_per_epoch,
+        num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
+        root=trainer_config.root,
+        target=trainer_config.target,
+        description=f'{trainer_config.task_key}_{trainer_config.name}',
+        lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
-        log=dae_config.log,
+        log=trainer_config.log,
         n_epochs=250, 
         patience=8
     )
@@ -708,7 +708,7 @@ def get_dae_brain_trainer(
 
 
 def get_dae_heart_trainer(
-    dae_config, 
+    trainer_config, 
     daes, 
     model, 
     train_loader, 
@@ -718,14 +718,14 @@ def get_dae_heart_trainer(
     wrapper = FrankensteinV2(
         seg_model=model,
         transformations=daes,
-        disabled_ids=dae_config.disabled_ids,
+        disabled_ids=trainer_config.disabled_ids,
         copy=True
     )
 
     criterion = MNMCriterionAE(
-        loss=dae_config.loss, 
-        recon=dae_config.reconstruction, 
-        diff=dae_config.difference
+        loss=trainer_config.loss, 
+        recon=trainer_config.reconstruction, 
+        diff=trainer_config.difference
     )
 
     eval_metrics = {
@@ -740,14 +740,14 @@ def get_dae_heart_trainer(
         criterion=criterion, 
         train_loader=train_loader, 
         valid_loader=val_loader,
-        num_batches_per_epoch=dae_config.num_batches_per_epoch,
-        num_val_batches_per_epoch=dae_config.num_val_batches_per_epoch,
-        root=dae_config.root,
-        target=dae_config.target,
-        description=f'{dae_config.task_key}_{dae_config.name}',
-        lr=dae_config.lr, 
+        num_batches_per_epoch=trainer_config.num_batches_per_epoch,
+        num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
+        root=trainer_config.root,
+        target=trainer_config.target,
+        description=f'{trainer_config.task_key}_{trainer_config.name}',
+        lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
-        log=dae_config.log,
+        log=trainer_config.log,
         n_epochs=250, 
         patience=8,
         device=torch.device('cuda')

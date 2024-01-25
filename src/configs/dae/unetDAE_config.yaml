@@ -1,0 +1,33 @@
+
+# Hyperparams
+
+model: 'unet'
+arch:
+  shortcut0:
+    channel: 8
+    num_res_units: 3
+  shortcut1:
+    channel: 16
+    num_res_units: 3
+  shortcut2:
+    channel: 32
+    num_res_units: 3
+  up3:
+    channel: 64
+    num_res_units: 3
+trainer:
+  batch_size: 32
+  augment: False
+  difference: True
+  reconstruction: True
+  loss: huber
+  target: output
+  lr: 1e-4
+  patience: 8
+  n_epochs: 250
+  num_batches_per_epoch: 250
+  num_val_batches_per_epoch: 50
+  disabled_ids: [shortcut0, shortcut1, shortcut2]
+
+# outputs
+plot_dir: ../experiments/unet/calgary/logs/

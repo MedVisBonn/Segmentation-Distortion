@@ -698,7 +698,7 @@ def get_brain_train_loader(
     transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
     
     data_path = cfg.fs.root + cfg.data.brain.data_path
-    model_cfg = cfg.model.unet.brain
+    model_cfg = cfg.unet.brain
     
     train_set = CalgaryCampinasDataset(
         data_path=data_path, 
@@ -785,9 +785,10 @@ def get_heart_train_loader(
     """
     
     return_orig = True if training == 'dae' else False
-    transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
-    
-    model_cfg = cfg.model.unet.heart
+    train_transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
+    val_transform_key = 'local_val_transforms' if training == 'dae' else 'io_transforms'
+
+    model_cfg = cfg.unet.heart
     
     transforms = Transforms()
     train_set = ACDCDataset(
@@ -799,7 +800,7 @@ def get_heart_train_loader(
         batch_size=model_cfg.training.batch_size,
         return_orig=return_orig
     )    
-    train_augmentor = transforms.get_transforms(transform_key)
+    train_augmentor = transforms.get_transforms(train_transform_key)
     train_gen = MultiThreadedAugmenter(
         data_loader = train_loader,
         transform = train_augmentor,
@@ -817,7 +818,7 @@ def get_heart_train_loader(
         batch_size=model_cfg.training.batch_size,
         return_orig=return_orig
     )
-    valid_augmentor = transforms.get_transforms('io_transforms')
+    valid_augmentor = transforms.get_transforms(val_transform_key)
     valid_gen = MultiThreadedAugmenter(
         data_loader = valid_loader, 
         transform = valid_augmentor, 
