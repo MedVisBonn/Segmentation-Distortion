@@ -1,0 +1,7 @@
+- +dae=unetDAE_config
+- +run.iteration=0
+- +run.task_key=brain
+- +run.name=calgary_unet_res3
+- ++wandb.log=True
+- ++wandb.name=calgary_unet_all
+- ++debug=False

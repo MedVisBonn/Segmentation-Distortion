@@ -1,0 +1,6 @@
+- +run.iteration=0
+- +run.task_key=heart
+- +run.name=test
+- ++wandb.log=False
+- ++wandb.name=hydra_test
+- ++debug=True

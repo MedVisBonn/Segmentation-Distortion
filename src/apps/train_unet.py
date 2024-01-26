@@ -19,8 +19,8 @@ def main(
     cfg
 ):
     # Check if run is in cfg (has to be specified on program call)
-    assert cfg.run is not None, "No run specified. Add +run.task_key=foo +run.iteration=bar to program call."
-    assert cfg.run.task_key is not None, "No task_key specified. Add +run.task_key=foo to program call."
+    assert cfg.run is not None, "No run specified. Add +run.data_key=foo +run.iteration=bar to program call."
+    assert cfg.run.data_key is not None, "No data_key specified. Add +run.data_key=foo to program call."
     assert cfg.run.iteration is not None, "No iteration specified. Add +run.iteration=foo to program call."
 
     # set up wandb
@@ -41,13 +41,13 @@ def main(
     )
 
     # get model
-    task_key = cfg.run.task_key
-    unet_cfg = cfg.unet[task_key]
+    data_key = cfg.run.data_key
+    unet_cfg = cfg.unet[data_key]
     with open_dict(unet_cfg):
         unet_cfg.log = cfg.wandb.log
         unet_cfg.debug = cfg.debug
         unet_cfg.root = cfg.fs.root
-        unet_cfg.task_key = task_key
+        unet_cfg.data_key = data_key
         unet_cfg.iteration = cfg.run.iteration
     
     model = get_unet(

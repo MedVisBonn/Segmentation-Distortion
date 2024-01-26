@@ -1,0 +1,5 @@
+- +run.iteration=0
+- +run.task_key=heart
+- ++wandb.name=hydra_test
+- ++debug=True
+- ++model.unet.brain.pre=test

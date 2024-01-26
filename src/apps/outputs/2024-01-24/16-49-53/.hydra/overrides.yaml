@@ -1,0 +1,5 @@
+- +run.iteration=0
+- +run.task_key=brain
+- +run.name=test
+- ++wandb.log=False
+- ++debug=True

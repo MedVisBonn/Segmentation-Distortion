@@ -1,0 +1,46 @@
+debug: true
+wandb:
+  log: true
+  name: hydra_test
+  project: MICCAI2023-extension
+fs:
+  root: ../../
+data:
+  brain:
+    data_path: data/conp-dataset/projects/calgary-campinas/CC359/Reconstructed/
+  heart:
+    data_path: data/mnm/
+model:
+  unet:
+    brain:
+      pre: test
+      n_chans_in: 1
+      n_filters_init: 8
+      n_chans_out: 1
+      training:
+        save_loc: pre-trained
+        train_site: 6
+        augment: true
+        validation: true
+        batch_size: 32
+        epochs: 250
+        patience: 4
+        lr: 0.001
+    heart:
+      pre: acdc_unt8_
+      n_chans_in: 1
+      n_filters_init: 8
+      n_chans_out: 4
+      training:
+        save_loc: pre-trained
+        augment: true
+        validation: true
+        batch_size: 32
+        num_batches_per_epoch: 250
+        num_val_batches_per_epoch: 50
+        epochs: 250
+        patience: 4
+        lr: 0.001
+run:
+  iteration: 0
+  task_key: brain

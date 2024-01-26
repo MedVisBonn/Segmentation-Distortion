@@ -640,7 +640,7 @@ def get_dae_trainer(
     train_loader,
     val_loader
 ):
-    if trainer_config.task_key == 'brain':
+    if trainer_config.data_key == 'brain':
         return get_dae_brain_trainer(
             trainer_config=trainer_config, 
             daes=daes, 
@@ -648,7 +648,7 @@ def get_dae_trainer(
             train_loader=train_loader, 
             val_loader=val_loader
         )
-    elif trainer_config.task_key == 'heart':
+    elif trainer_config.data_key == 'heart':
         return get_dae_heart_trainer(
             trainer_config=trainer_config, 
             daes=daes, 
@@ -657,7 +657,7 @@ def get_dae_trainer(
             val_loader=val_loader
         )
     else:
-        raise ValueError(f"Unknown task_key {trainer_config.task_key}")
+        raise ValueError(f"Unknown data_key {trainer_config.data_key}")
 
 
 def get_dae_brain_trainer(
@@ -696,7 +696,7 @@ def get_dae_brain_trainer(
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
         root=trainer_config.root,
         target=trainer_config.target,
-        description=f'{trainer_config.task_key}_{trainer_config.name}',
+        description=f'{trainer_config.data_key}_{trainer_config.name}',
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
         log=trainer_config.log,
@@ -744,7 +744,7 @@ def get_dae_heart_trainer(
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
         root=trainer_config.root,
         target=trainer_config.target,
-        description=f'{trainer_config.task_key}_{trainer_config.name}',
+        description=f'{trainer_config.data_key}_{trainer_config.name}',
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
         log=trainer_config.log,

@@ -87,6 +87,7 @@ class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
         return out
     
     
+
 class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
     """Multi image single view dataloader.
     
@@ -124,6 +125,7 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         return out
     
     
+
 class Transforms(object):
     """
     A container for organizing and accessing different sets of image transformation operations.
@@ -407,7 +409,6 @@ def _apply_op(
     return img
 
 
-
 class RandAugmentWithLabels(torch.nn.Module):
     r"""RandAugment data augmentation method based on
     `"RandAugment: Practical automated data augmentation with a reduced search space"
@@ -535,8 +536,10 @@ class RandAugmentWithLabels(torch.nn.Module):
         return s
 
         
+
 def volume_collate(batch: List[dict]) -> dict:
     return batch[0]
+
 
         
 def slice_selection(
@@ -557,6 +560,7 @@ def slice_selection(
     kmeans = KMeans(n_clusters=n_cases).fit(kmeans_in)
     idx, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, kmeans_in)
     return indices[idx]
+
 
 
 def dataset_from_indices(
@@ -583,6 +587,7 @@ def dataset_from_indices(
             return self.input.size(0)
         
     return CustomDataset(*data.values())
+
 
 
 @torch.no_grad()
@@ -653,6 +658,82 @@ def get_subset(
 
 
 
+def get_eval_data(
+    train_set: bool,
+    val_set: bool,
+    test_sets: List[str],
+    cfg: OmegaConf
+):
+    if cfg.run.data_key == 'brain':
+        data = get_brain_eval_loader(
+            train_set=train_set, 
+            val_set=val_set, 
+            test_sets=test_sets
+            cfg=cfg
+        )
+
+
+    return data
+
+
+
+def get_brain_eval_loader(
+    cfg: OmegaConf,
+    train_set: bool,
+    val_set: bool,
+    test_sets: List[str] = [],      
+):
+    """ Instantiates dataloaders for Calgary-Campinas dataset.
+
+    Args:
+        train_set (bool): Whether to return training set.
+        val_set (bool): Whether to return validation set.
+        test_sets (List[str]): List of test sets to return.
+        cfg (OmegaConf): data config. 
+            Contains the task specific data paths
+
+    Returns:
+
+    """
+
+    data_path = cfg.fs.root + cfg.data.brain.data_path
+    data = {}
+
+    if train_set:
+        # no volume wise
+        train_set = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=cfg.unet.brain.training.train_site,
+            normalize=True, 
+            split='train', 
+            debug=cfg.debug
+        )
+
+    elif val_set:
+        # volume wise for image
+        val_set = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=cfg.unet.brain.training.train_site,
+            normalize=True, 
+            split='validation',
+            debug=cfg.debug
+        )
+        data['val'] = val_set
+
+    for site in test_sets:
+        data[str(site)] = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=site,
+            normalize=True, 
+            split='all',
+            debug=cfg.debug
+        )
+    assert len(data) > 0, "No data sets selected."
+
+    return data
+
+
+
 def get_train_loader(
     training: str,
     cfg: OmegaConf
@@ -662,19 +743,19 @@ def get_train_loader(
     Args:
         training (str): Either 'unet' or 'dae'
         cfg (OmegaConf): data config. 
-            Contains the task specific data paths and the task_key.
+            Contains the task specific data paths and the data_key.
 
     Returns:
         train_loader (MultiThreadedAugmenter): Training data generator.
         val_loader (MultiThreadedAugmenter): Validation data generator.
     """
 
-    if cfg.run.task_key == 'brain':
+    if cfg.run.data_key == 'brain':
         train_loader, val_loader = get_brain_train_loader(training=training, cfg=cfg)
-    elif cfg.run.task_key == 'heart':
+    elif cfg.run.data_key == 'heart':
         train_loader, val_loader = get_heart_train_loader(training=training, cfg=cfg)
     else:
-        raise ValueError(f"Unknown task {cfg.run.task_key}. Task key must be either 'brain' or 'heart'")
+        raise ValueError(f"Unknown task {cfg.run.data_key}. Task key must be either 'brain' or 'heart'")
     return train_loader, val_loader
 
 

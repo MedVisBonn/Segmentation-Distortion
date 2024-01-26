@@ -1,0 +1,5 @@
+- +run.iteration=0
+- +run.task_key=brain
+- ++debug=True
+- ++wandb.log=False
+- ++model.unet.brain.pre=test

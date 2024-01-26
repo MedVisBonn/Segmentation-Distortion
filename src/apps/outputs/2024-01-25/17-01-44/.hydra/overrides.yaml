@@ -1,0 +1,7 @@
+- +dae=unetDAE_config
+- +run.iteration=0
+- +run.task_key=heart
+- +run.name=acdc_unet_res3
+- ++wandb.log=True
+- ++wandb.name=acdc_unet_all
+- ++debug=False

@@ -50,7 +50,7 @@ def get_unet_trainer(
                 log
                 debug
                 root
-                task_key
+                data_key
                 iteration
         train_loader (DataLoader): training data loader
         val_loader (DataLoader): validation data loader
@@ -59,7 +59,7 @@ def get_unet_trainer(
     Returns:
         UNetTrainerACDC or UNetTrainerCalgary: trainer object
     """
-    if model_cfg.task_key == 'heart':
+    if model_cfg.data_key == 'heart':
         trainer = get_unet_heart_trainer(
             model_cfg, 
             train_loader, 
@@ -67,7 +67,7 @@ def get_unet_trainer(
             model
         )
 
-    elif model_cfg.task_key == 'brain':
+    elif model_cfg.data_key == 'brain':
         trainer = get_unet_brain_trainer(
             model_cfg, 
             train_loader, 

@@ -1,0 +1,78 @@
+debug: false
+wandb:
+  log: true
+  project: MICCAI2023-extension
+  name: unet_test
+fs:
+  root: ../../
+data:
+  brain:
+    data_path: data/conp-dataset/projects/calgary-campinas/CC359/Reconstructed/
+  heart:
+    data_path: data/mnm/
+unet:
+  brain:
+    pre: calgary_unet
+    n_chans_in: 1
+    n_filters_init: 8
+    n_chans_out: 1
+    training:
+      save_loc: pre-trained
+      train_site: 6
+      augment: true
+      validation: true
+      batch_size: 32
+      epochs: 250
+      patience: 4
+      lr: 0.001
+  heart:
+    pre: acdc_unet8_
+    n_chans_in: 1
+    n_filters_init: 8
+    n_chans_out: 4
+    training:
+      save_loc: pre-trained
+      augment: true
+      validation: true
+      batch_size: 32
+      num_batches_per_epoch: 250
+      num_val_batches_per_epoch: 50
+      epochs: 250
+      patience: 4
+      lr: 0.001
+dae:
+  model: unet
+  arch:
+    shortcut0:
+      channel: 8
+      num_res_units: 0
+    shortcut1:
+      channel: 16
+      num_res_units: 0
+    shortcut2:
+      channel: 32
+      num_res_units: 0
+    up3:
+      channel: 64
+      num_res_units: 0
+  trainer:
+    batch_size: 32
+    augment: false
+    difference: true
+    reconstruction: true
+    loss: huber
+    target: output
+    lr: 0.0001
+    patience: 8
+    n_epochs: 250
+    num_batches_per_epoch: 250
+    num_val_batches_per_epoch: 50
+    disabled_ids:
+    - shortcut0
+    - shortcut1
+    - shortcut2
+  plot_dir: ../experiments/unet/calgary/logs/
+run:
+  iteration: 0
+  task_key: heart
+  name: unet_test

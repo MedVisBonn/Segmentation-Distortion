@@ -20,13 +20,11 @@ def main(
     cfg
 ):
     # Check if run is in cfg (has to be specified on program call)
-    assert cfg.run is not None, "No run specified. Add +run.task_key=foo +run.iteration=bar to program call."
-    assert cfg.run.task_key is not None, "No task_key specified. Add +run.task_key=foo to program call."
+    assert cfg.run is not None, "No run specified. Add +run.data_key=foo +run.iteration=bar to program call."
+    assert cfg.run.data_key is not None, "No data_key specified. Add +run.data_key=foo to program call."
     assert cfg.run.iteration is not None, "No iteration specified. Add +run.iteration=foo to program call."
     assert cfg.run.name is not None, "No name specified. Add +run.name=foo to program call."
-    task_key = cfg.run.task_key
-
-    print(OmegaConf.to_yaml(cfg))
+    data_key = cfg.run.data_key
 
     # set up wandb
     if cfg.wandb.log:
@@ -46,7 +44,7 @@ def main(
     )
 
     # get segmentation model
-    unet_cfg = cfg.unet[task_key]
+    unet_cfg = cfg.unet[data_key]
     with open_dict(unet_cfg):
         unet_cfg.iteration = cfg.run.iteration
         unet_cfg.root = cfg.fs.root
@@ -69,7 +67,7 @@ def main(
         trainer_config.log = cfg.wandb.log
         trainer_config.debug = cfg.debug
         trainer_config.root = cfg.fs.root
-        trainer_config.task_key = task_key
+        trainer_config.data_key = data_key
         trainer_config.iteration = cfg.run.iteration
         trainer_config.name = cfg.run.name
 
