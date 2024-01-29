@@ -20,19 +20,23 @@ from dpipe.layers.conv import PreActivation2d
 
 
 def get_unet(
-    unet_cfg: OmegaConf, 
+    # unet_cfg: OmegaConf, 
+    cfg: OmegaConf,
     return_state_dict=False
 ) -> Union[nn.Module, Tuple[nn.Module, Dict]]:
+    
+    unet_cfg = cfg.unet[cfg.run.data_key]
     unet = UNet2D(
         n_chans_in=unet_cfg.n_chans_in, 
         n_chans_out=unet_cfg.n_chans_out, 
         n_filters_init=unet_cfg.n_filters_init
     )
     if return_state_dict:
-        unet_name = unet_cfg.pre + str(unet_cfg.iteration)
-        model_path = f'{unet_cfg.root}pre-trained/trained_UNets/{unet_name}_best.pt'
+        iteration = cfg.run.iteration
+        root = cfg.fs.root
+        unet_name = unet_cfg.pre + str(iteration)
+        model_path = f'{root}pre-trained/trained_UNets/{unet_name}_best.pt'
         state_dict = torch.load(model_path)['model_state_dict']
-
         return unet, state_dict
     else:
         return unet

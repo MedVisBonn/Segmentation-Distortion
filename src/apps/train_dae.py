@@ -44,21 +44,24 @@ def main(
     )
 
     # get segmentation model
-    unet_cfg = cfg.unet[data_key]
-    with open_dict(unet_cfg):
-        unet_cfg.iteration = cfg.run.iteration
-        unet_cfg.root = cfg.fs.root
+    # unet_cfg = cfg.unet[data_key]
+    # with open_dict(unet_cfg):
+    #     unet_cfg.iteration = cfg.run.iteration
+    #     unet_cfg.root = cfg.fs.root
     unet, state_dict = get_unet(
-        unet_cfg=unet_cfg, 
-        return_state_dict=True
+        cfg=cfg, 
+        return_state_dict=False
     )
-    unet.load_state_dict(state_dict)
+    # unet.load_state_dict(state_dict)
 
     # get dae models
-    daes = get_daes(
-        arch=cfg.dae.arch, 
-        model=cfg.dae.model,
-        disabled_ids=cfg.dae.trainer.disabled_ids
+    model = get_daes(
+        unet,
+        cfg=cfg,
+        return_state_dict=False
+        # arch=cfg.dae.arch, 
+        # model=cfg.dae.model,
+        # disabled_ids=cfg.dae.trainer.disabled_ids
     )
 
     # get trainer
@@ -73,8 +76,8 @@ def main(
 
     trainer = get_dae_trainer(
         trainer_config=trainer_config, 
-        daes=daes, 
-        model=unet, 
+        # daes=daes, 
+        model=model, 
         train_loader=train_loader, 
         val_loader=val_loader
     )

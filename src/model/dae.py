@@ -4,14 +4,20 @@ import torch
 from torch import Tensor, nn
 from model.ae import AE, ChannelAE
 from monai.networks.nets import UNet
+from model.wrapper import FrankensteinV2
 
 
 
 def get_daes(
-    arch: OmegaConf,
-    model: str,
-    disabled_ids: list = []
+    unet: nn.Module,
+    cfg: OmegaConf,
+    return_state_dict: bool = False
 )-> nn.ModuleDict:
+    
+    model = cfg.dae.model
+    arch = cfg.dae.arch
+    disabled_ids = cfg.dae.trainer.disabled_ids
+
     if model == 'unet':
         daes = get_unetDAE(arch)
     elif model == 'channel':
@@ -22,7 +28,23 @@ def get_daes(
     for layer in disabled_ids:
         daes[layer] = nn.Identity()
 
-    return daes
+    model = FrankensteinV2(
+        seg_model=unet,
+        transformations=daes,
+        disabled_ids=disabled_ids,
+        copy=True
+    )
+
+    if return_state_dict:
+        root = cfg.fs.root
+        data_key = cfg.run.data_key
+        iteration = cfg.run.iteration
+        model_name = f'{data_key}_{cfg.dae.name}{iteration}_best.pt'
+        model_path = f'{root}pre-trained-tmp/trained_AEs/{model_name}'
+        state_dict = torch.load(model_path)['model_state_dict']
+        return model, state_dict
+    else:
+        return model
 
 
 

@@ -41,17 +41,16 @@ def main(
     )
 
     # get model
-    data_key = cfg.run.data_key
-    unet_cfg = cfg.unet[data_key]
-    with open_dict(unet_cfg):
-        unet_cfg.log = cfg.wandb.log
-        unet_cfg.debug = cfg.debug
-        unet_cfg.root = cfg.fs.root
-        unet_cfg.data_key = data_key
-        unet_cfg.iteration = cfg.run.iteration
-    
+    # data_key = cfg.run.data_key
+    # unet_cfg = cfg.unet[data_key]
+    # with open_dict(unet_cfg):
+    #     unet_cfg.log = cfg.wandb.log
+    #     unet_cfg.debug = cfg.debug
+    #     unet_cfg.root = cfg.fs.root
+    #     unet_cfg.data_key = data_key
+    #     unet_cfg.iteration = cfg.run.iteration
     model = get_unet(
-        unet_cfg=unet_cfg, 
+        cfg=cfg, 
         return_state_dict=False
     )
 
@@ -60,7 +59,7 @@ def main(
         train_loader=train_loader,
         val_loader=val_loader,
         model=model,
-        model_cfg=unet_cfg
+        cfg=cfg
     )
     
     trainer.fit()

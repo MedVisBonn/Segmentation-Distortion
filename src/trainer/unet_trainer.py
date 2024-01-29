@@ -83,7 +83,8 @@ def get_unet_trainer(
 
 
 def get_unet_heart_trainer(
-    model_cfg, 
+    # model_cfg, 
+    cfg,
     train_loader, 
     val_loader,
     model
@@ -99,11 +100,13 @@ def get_unet_heart_trainer(
     Returns:
         UNetTrainerACDC: trainer object
     """
-    # model = UNet2D(
-    #     n_chans_in=model_cfg.n_chans_in, 
-    #     n_chans_out=model_cfg.n_chans_out, 
-    #     n_filters_init=model_cfg.n_filters_init
-    # )
+
+    model_cfg = model_cfg.unet[cfg.data_key]
+    root = cfg.fs.root
+    iteration = cfg.run.iteration
+    log = cfg.wandb.log
+
+
     criterion    = CrossEntropyTargetArgmax()
     eval_metrics = {
         "Volumetric Dice": DiceScoreMMS()
@@ -115,14 +118,14 @@ def get_unet_heart_trainer(
         val_loader=val_loader,
         num_batches_per_epoch=model_cfg.training.num_batches_per_epoch,
         num_val_batches_per_epoch=model_cfg.training.num_val_batches_per_epoch,
-        root=model_cfg.root, 
-        description=model_cfg.pre + str(model_cfg.iteration), 
+        root=root, 
+        description=model_cfg.pre + str(iteration), 
         lr=model_cfg.training.lr, 
         n_epochs=model_cfg.training.epochs, 
         patience=model_cfg.training.patience, 
         es_mode='max', 
         eval_metrics=eval_metrics, 
-        log=model_cfg.log, 
+        log=log, 
         save_loc=model_cfg.training.save_loc
     )
     
@@ -130,7 +133,8 @@ def get_unet_heart_trainer(
 
 
 def get_unet_brain_trainer(
-    model_cfg, 
+    # model_cfg,
+    cfg,
     train_loader, 
     val_loader,
     model
@@ -146,11 +150,14 @@ def get_unet_brain_trainer(
     Returns:
         UNetTrainerCalgary: trainer object
     """
-    # model = UNet2D(
-    #     n_chans_in=model_cfg.n_chans_in, 
-    #     n_chans_out=model_cfg.n_chans_out, 
-    #     n_filters_init=model_cfg.n_filters_init
-    # )
+
+    model_cfg = model_cfg.unet[cfg.data_key]
+    root = cfg.fs.root
+    iteration = cfg.run.iteration
+    log = cfg.wandb.log
+
+
+
     criterion = nn.CrossEntropyLoss()
     eval_metrics = {
         'Volumetric Dice': DiceScoreCalgary(), 
@@ -161,14 +168,14 @@ def get_unet_brain_trainer(
         criterion=criterion, 
         train_generator=train_loader, 
         val_loader=val_loader, 
-        root=model_cfg.root, 
-        description=model_cfg.pre + str(model_cfg.iteration), 
+        root=root, 
+        description=model_cfg.pre + str(iteration), 
         lr=model_cfg.training.lr, 
         n_epochs=model_cfg.training.epochs, 
         patience=model_cfg.training.patience, 
         es_mode='max', 
         eval_metrics=eval_metrics, 
-        log=model_cfg.log, 
+        log=log, 
         save_loc=model_cfg.training.save_loc
     )
     

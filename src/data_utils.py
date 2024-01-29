@@ -665,10 +665,18 @@ def get_eval_data(
     cfg: OmegaConf
 ):
     if cfg.run.data_key == 'brain':
-        data = get_brain_eval_loader(
+        data = get_brain_eval_data(
             train_set=train_set, 
             val_set=val_set, 
-            test_sets=test_sets
+            test_sets=test_sets,
+            cfg=cfg
+        )
+    
+    elif cfg.run.data_key == 'heart':
+        data = get_heart_eval_data(
+            train_set=train_set, 
+            val_set=val_set, 
+            test_sets=test_sets,
             cfg=cfg
         )
 
@@ -677,7 +685,7 @@ def get_eval_data(
 
 
 
-def get_brain_eval_loader(
+def get_brain_eval_data(
     cfg: OmegaConf,
     train_set: bool,
     val_set: bool,
@@ -693,6 +701,8 @@ def get_brain_eval_loader(
             Contains the task specific data paths
 
     Returns:
+        data (dict): Dictionary of data sets. Keys are 'train',
+          'val', and test set names.
 
     """
 
@@ -731,6 +741,55 @@ def get_brain_eval_loader(
     assert len(data) > 0, "No data sets selected."
 
     return data
+
+
+
+def get_heart_eval_data(
+    cfg: OmegaConf,
+    train_set: bool,
+    val_set: bool,
+    test_sets: List[str] = [],
+):
+    """ Instantiates dataloaders for ACDC dataset.
+
+    Args:
+        train_set (bool): Whether to return training set.
+        val_set (bool): Whether to return validation set.
+        test_sets (List[str]): List of test sets to return.
+        cfg (OmegaConf): data config. 
+            Contains the task specific data paths
+
+    Returns:
+        data (dict): Dictionary of data sets. Keys are 'train',
+            'val', and test set names.
+
+    """
+
+    data = {}
+    if train_set:
+        train_set = ACDCDataset(
+            data="train",
+            debug=cfg.debug
+        )
+        data['train'] = train_set
+
+    if val_set:
+        val_set = ACDCDataset(
+            data="val",
+            debug=cfg.debug
+        )
+        data['val'] = val_set
+
+    for vendor in test_sets:
+        data[vendor] = MNMDataset(
+            vendor=vendor,
+            debug=cfg.debug
+        )
+
+    assert len(data) > 0, "No data sets selected."
+
+    return data
+    
 
 
 
@@ -848,6 +907,7 @@ def get_brain_train_loader(
         )
     
     return train_gen, valid_gen
+
 
 
 def get_heart_train_loader(
