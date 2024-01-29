@@ -6,12 +6,15 @@ from typing import (
     Union, 
     List
 )
+from omegaconf import OmegaConf 
 import wandb
 import numpy as np
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+
+from torchmetrics.classification import BinaryPrecisionRecallCurve
 from utils import (
     _activate_dropout, 
     UMapGenerator, 
@@ -19,7 +22,71 @@ from utils import (
     Metrics
 )
 
-            
+
+
+@torch.no_grad()
+def get_precision_recall(
+    model: nn.Module, 
+    dataset: Dataset, 
+    net_out: str, 
+    dae: bool,
+    umap: str, 
+    device='cuda:0'
+):
+    if dae == True:
+        # Remove trainiung hooks, add evaluation hooks
+        model.remove_all_hooks()        
+        model.hook_transformations(model.transformations, n_samples=1)
+        # Put model in evaluation state
+        model.to(device)
+        model.eval()
+        model.freeze_seg_model()
+
+    batch_size = 32
+
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        drop_last=True
+    )
+
+    umap_generator = UMapGenerator(
+        method=umap,
+        net_out=net_out,
+    ).to(device)
+
+    umaps   = []
+    errmaps = []
+
+    for _, batch in enumerate(dataloader):
+
+        input_ = batch['input'].to(device)
+        gt = batch['target'].to(device)
+        gt[gt == -1] = 0
+        output = model(input_)
+
+        if net_out == 'calgary':
+            segmap = (torch.sigmoid(output[:batch_size]) > 0.5) * 1
+            errmap = (gt != segmap).float()
+        elif net_out == 'mms':
+            segmap = torch.argmax(output[:batch_size], dim=1, keepdims=True)
+            errmap = (gt != segmap).float()
+
+        umaps.append(umap_generator(output, batch_size=batch_size).cpu())
+        errmaps.append(errmap.cpu())
+
+    bprc = BinaryPrecisionRecallCurve()
+    # TODO: Change to torcheval once its stable :)
+    # bprc = torcheval.metrics.BinaryPrecisionRecallCurve()
+    umaps = torch.cat(umaps, dim=0).flatten()
+    errmaps = torch.cat(errmaps, dim=0).flatten().long()
+    bprc.update(umaps, errmaps)
+    
+    return bprc
+
+
+
 @torch.no_grad()
 def get_metrics_from_aes(
     model: nn.Module, 
