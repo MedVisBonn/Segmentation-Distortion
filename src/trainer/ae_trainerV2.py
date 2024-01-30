@@ -34,7 +34,7 @@ class AETrainerCalgaryV2:
     def __init__(
         self, 
         model: nn.Module, 
-        unet: nn.Module, 
+        # unet: nn.Module, 
         criterion: Callable, 
         train_loader: DataLoader,
         valid_loader: DataLoader, 
@@ -53,7 +53,7 @@ class AETrainerCalgaryV2:
     ):
         self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model        = model.to(self.device)
-        self.unet         = unet.to(self.device)
+        # self.unet         = unet.to(self.device)
         self.criterion    = criterion
         self.train_loader = train_loader
         self.valid_loader = valid_loader
@@ -265,7 +265,7 @@ class AETrainerCalgaryV2:
         self.model.remove_all_hooks()
         self.model.training_data = {}
         self.model.hook_train_transformations(self.model.transformations)
-        self.unet.eval()
+        # self.unet.eval()
         self.model.freeze_seg_model()
 
         self.model.eval()
@@ -318,7 +318,7 @@ class AETrainerACDCV2:
     def __init__(
         self, 
         model: nn.Module, 
-        unet: nn.Module, 
+        # unet: nn.Module, 
         criterion: Callable, 
         train_loader: DataLoader,
         valid_loader: DataLoader,
@@ -338,7 +338,7 @@ class AETrainerACDCV2:
     ):
         self.device       = device
         self.model        = model.to(self.device)
-        self.unet         = unet.to(self.device)
+        # self.unet         = unet.to(self.device)
         self.criterion    = criterion
         self.train_loader = train_loader
         self.valid_loader = valid_loader
@@ -582,7 +582,7 @@ class AETrainerACDCV2:
         self.model.remove_all_hooks()
         self.model.training_data = {}
         self.model.hook_train_transformations(self.model.transformations)
-        self.unet.eval()
+        # self.unet.eval()
         self.model.freeze_seg_model()
 
         self.model.eval()
@@ -633,73 +633,63 @@ class AETrainerACDCV2:
         self.load_model()
 
 
+
 def get_dae_trainer(
-    trainer_config,
-    daes,
+    cfg,
     model,
     train_loader,
     val_loader
 ):
-    if trainer_config.data_key == 'brain':
+    if cfg.run.data_key == 'brain':
         return get_dae_brain_trainer(
-            trainer_config=trainer_config, 
-            daes=daes, 
+            cfg=cfg, 
             model=model, 
             train_loader=train_loader, 
             val_loader=val_loader
         )
-    elif trainer_config.data_key == 'heart':
+    elif cfg.run.data_key == 'heart':
         return get_dae_heart_trainer(
-            trainer_config=trainer_config, 
-            daes=daes, 
+            cfg=cfg, 
             model=model, 
             train_loader=train_loader, 
             val_loader=val_loader
         )
     else:
-        raise ValueError(f"Unknown data_key {trainer_config.data_key}")
+        raise ValueError(f"Unknown data_key {cfg.run.data_key}")
+
 
 
 def get_dae_brain_trainer(
-    trainer_config, 
-    daes, 
+    cfg, 
     model, 
     train_loader, 
     val_loader 
 ):
     
-    wrapper = FrankensteinV2(
-        seg_model=model,
-        transformations=daes,
-        disabled_ids=trainer_config.disabled_ids,
-        copy=True
-    )
-
+    trainer_config = cfg.dae.trainer
     criterion = CalgaryCriterionAE(
         loss=trainer_config.loss, 
         recon=trainer_config.reconstruction, 
         diff=trainer_config.difference
     )
-
     eval_metrics = {
         'Sample Volumetric Dice': SampleDice(data='calgary'),
         'UNet Volumetric Dice': UnetDice(data='calgary')
     }
 
     trainer = AETrainerCalgaryV2(
-        model=wrapper, 
-        unet=model, 
+        model=model, 
         criterion=criterion,
         train_loader=train_loader, 
         valid_loader=val_loader,
         num_batches_per_epoch=trainer_config.num_batches_per_epoch,
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
-        root=trainer_config.root,
+        root=cfg.fs.root,
         target=trainer_config.target,
-        description=f'{trainer_config.data_key}_{trainer_config.name}',
+        description=f'{cfg.run.data_key}_{cfg.run.name}_{cfg.run.iteration}',
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
-        log=trainer_config.log,
+        log=cfg.wandb.log,
         n_epochs=250, 
         patience=8
     )
@@ -708,46 +698,35 @@ def get_dae_brain_trainer(
 
 
 def get_dae_heart_trainer(
-    trainer_config, 
-    daes, 
+    cfg, 
     model, 
     train_loader, 
     val_loader
 ):
-
-    wrapper = FrankensteinV2(
-        seg_model=model,
-        transformations=daes,
-        disabled_ids=trainer_config.disabled_ids,
-        copy=True
-    )
-
+    trainer_config = cfg.dae.trainer
     criterion = MNMCriterionAE(
         loss=trainer_config.loss, 
         recon=trainer_config.reconstruction, 
         diff=trainer_config.difference
     )
-
     eval_metrics = {
         'Sample Volumetric Dice': SampleDice(data='MNM'),
         'UNet Volumetric Dice': UnetDice(data='MNM')
     }
 
-
     trainer = AETrainerACDCV2(
-        model=wrapper, 
-        unet=model, 
+        model=model, 
         criterion=criterion, 
         train_loader=train_loader, 
         valid_loader=val_loader,
         num_batches_per_epoch=trainer_config.num_batches_per_epoch,
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
-        root=trainer_config.root,
+        root=cfg.fs.root,
         target=trainer_config.target,
-        description=f'{trainer_config.data_key}_{trainer_config.name}',
+        description=f'{cfg.run.data_key}_{cfg.run.name}_{cfg.run.iteration}',
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
-        log=trainer_config.log,
+        log=cfg.wandb.log,
         n_epochs=250, 
         patience=8,
         device=torch.device('cuda')

@@ -2,6 +2,7 @@
 # Hyperparams
 
 model: 'unet'
+name: 'acdc_unet_up3_res'
 arch:
   shortcut0:
     channel: 8

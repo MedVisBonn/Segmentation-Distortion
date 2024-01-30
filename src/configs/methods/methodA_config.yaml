@@ -1,0 +1,5 @@
+name: MethodA
+eval:
+  train_set: True
+  val_set: True
+  test_sets: [1, 2, 3, 4, 5]

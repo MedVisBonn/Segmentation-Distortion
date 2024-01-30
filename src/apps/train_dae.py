@@ -1,7 +1,7 @@
 import sys
 import wandb
 import hydra
-from omegaconf import OmegaConf, open_dict
+from omegaconf import OmegaConf
 
 sys.path.append('../')
 from data_utils import get_train_loader
@@ -24,7 +24,6 @@ def main(
     assert cfg.run.data_key is not None, "No data_key specified. Add +run.data_key=foo to program call."
     assert cfg.run.iteration is not None, "No iteration specified. Add +run.iteration=foo to program call."
     assert cfg.run.name is not None, "No name specified. Add +run.name=foo to program call."
-    data_key = cfg.run.data_key
 
     # set up wandb
     if cfg.wandb.log:
@@ -43,45 +42,29 @@ def main(
         cfg=cfg
     )
 
-    # get segmentation model
-    # unet_cfg = cfg.unet[data_key]
-    # with open_dict(unet_cfg):
-    #     unet_cfg.iteration = cfg.run.iteration
-    #     unet_cfg.root = cfg.fs.root
+    # get unet
     unet, state_dict = get_unet(
         cfg=cfg, 
-        return_state_dict=False
+        return_state_dict=True
     )
-    # unet.load_state_dict(state_dict)
+    unet.load_state_dict(state_dict)
 
     # get dae models
     model = get_daes(
         unet,
         cfg=cfg,
         return_state_dict=False
-        # arch=cfg.dae.arch, 
-        # model=cfg.dae.model,
-        # disabled_ids=cfg.dae.trainer.disabled_ids
     )
 
     # get trainer
-    trainer_config = cfg.dae.trainer
-    with open_dict(trainer_config):
-        trainer_config.log = cfg.wandb.log
-        trainer_config.debug = cfg.debug
-        trainer_config.root = cfg.fs.root
-        trainer_config.data_key = data_key
-        trainer_config.iteration = cfg.run.iteration
-        trainer_config.name = cfg.run.name
-
     trainer = get_dae_trainer(
-        trainer_config=trainer_config, 
-        # daes=daes, 
+        cfg=cfg,
         model=model, 
         train_loader=train_loader, 
         val_loader=val_loader
     )
 
+    # start optimization
     trainer.fit()
 
 
