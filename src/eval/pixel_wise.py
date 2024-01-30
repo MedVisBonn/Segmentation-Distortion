@@ -58,9 +58,7 @@ def get_precision_recall(
 
     umaps   = []
     errmaps = []
-
     for _, batch in enumerate(dataloader):
-
         input_ = batch['input'].to(device[0])
         gt     = batch['target'].to(device[0])
         gt[gt == -1] = 0
@@ -90,7 +88,6 @@ def get_precision_recall(
         taus = np.quantile(umaps, torch.linspace(0, 1, n_taus)**(1/16)).tolist()
     elif n_taus == 'auto':
         taus = None
-
     # TODO: Change to torcheval once its stable :)
     # bprc = torcheval.metrics.BinaryPrecisionRecallCurve()
     bprc = BinaryPrecisionRecallCurve(thresholds = taus).cuda()
