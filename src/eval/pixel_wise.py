@@ -42,7 +42,6 @@ def get_precision_recall(
         model.to(device[0])
         model.eval()
         model.freeze_seg_model()
-
     batch_size = 32
 
     dataloader = DataLoader(
@@ -63,15 +62,21 @@ def get_precision_recall(
     for _, batch in enumerate(dataloader):
 
         input_ = batch['input'].to(device[0])
-        gt = batch['target'].to(device[0])
+        gt     = batch['target'].to(device[0])
         gt[gt == -1] = 0
         output = model(input_)
 
         if net_out == 'brain':
-            segmap = (torch.sigmoid(output[:batch_size]) > 0.5) * 1
+            if dae:
+                segmap = (torch.sigmoid(output[:batch_size]) > 0.5) * 1
+            else:
+                segmap = (torch.sigmoid(output) > 0.5) * 1
             errmap = (gt != segmap).float()
         elif net_out == 'heart':
-            segmap = torch.argmax(output[:batch_size], dim=1, keepdims=True)
+            if dae:
+                segmap = torch.argmax(output[:batch_size], dim=1, keepdims=True)
+            else:
+                segmap = torch.argmax(output, dim=1, keepdims=True)
             errmap = (gt != segmap).float()
 
         umaps.append(umap_generator(output, batch_size=batch_size).cpu())
