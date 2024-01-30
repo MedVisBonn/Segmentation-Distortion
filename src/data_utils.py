@@ -659,10 +659,10 @@ def get_subset(
 
 
 def get_eval_data(
-    train_set: bool,
-    val_set: bool,
-    test_sets: List[str],
     cfg: OmegaConf,
+    train_set: bool = False,
+    val_set: bool = False,
+    test_sets: List[str] = [],
     subset_dict: Optional[dict] = None
 ):
     if cfg.run.data_key == 'brain':
@@ -743,9 +743,9 @@ def get_brain_eval_data(
     assert len(data) > 0, "No data sets selected."
 
     if subset_dict is not None:
-        data_small = {}
+        data_subset = {}
         for key in data:
-            data_small[f'{key}_small'] = get_subset(
+            data_subset[f'{key}_subset'] = get_subset(
                 dataset=data[key], 
                 model=subset_dict['unet'].cuda(),
                 criterion=nn.BCEWithLogitsLoss(reduction='none'),
@@ -754,7 +754,7 @@ def get_brain_eval_data(
                 batch_size=32,
                 verbose=True
             )
-        data = data | data_small
+        data = {**data, **data_subset}
 
     return data
 

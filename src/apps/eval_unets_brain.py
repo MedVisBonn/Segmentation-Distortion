@@ -27,9 +27,9 @@ def test_set(model: nn.Module, dataloader: DataLoader, eval_metrics: Dict) -> Di
         batch_sizes.append(input_.shape[0])
 
         input_chunks  = torch.split(input_, 32, dim=0)
-        target_chunks = torch.split(target, 32, dim=0)
+        # target_chunks = torch.split(target, 32, dim=0)
         net_out = []
-        for input_chunk, target_chunk in zip(input_chunks, target_chunks):
+        for input_chunk in input_chunks:
             net_out_chunk = model(input_chunk.cuda())
             net_out.append(net_out_chunk.detach().cpu())
 
