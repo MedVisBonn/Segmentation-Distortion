@@ -92,6 +92,7 @@ class Thresholder(nn.Module):
     
     
     
+
 class UMapGenerator(nn.Module):
     """
     Calculates uncertainty maps from UNets in different ways.
@@ -104,8 +105,8 @@ class UMapGenerator(nn.Module):
     
     def __init__(
         self,
-        method  = 'ae',
-        net_out = 'mms'
+        method: str,  # 'ae'
+        net_out: str,  # 'mms' or 'calgary'
     ):
         super().__init__()
         self.method  = method
@@ -114,7 +115,7 @@ class UMapGenerator(nn.Module):
         self.ce      = nn.CrossEntropyLoss(reduction='none') if net_out=='mms' else nn.BCEWithLogitsLoss(reduction='none')
     
     @torch.no_grad()
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, batch_size: int = 1) -> Tensor:
         
         if self.method == 'none':
             return None
@@ -126,23 +127,23 @@ class UMapGenerator(nn.Module):
         #################################
         
         if self.method == 'cross_entropy':
-            umap = self.ce(x[:1], self.m(x[1:]))
-            umap = umap.mean(dim=0, keepdims=True)
+            umap = self.ce(x[:batch_size], self.m(x[batch_size:]))
+            #umap = umap.mean(dim=0, keepdims=True)
             
         elif self.method == 'entropy':          
-            x_prob = self.m(x[:1])
+            x_prob = self.m(x[:batch_size])
             umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy()
 
         elif self.method == 'kl_divergence':
-            x_in = F.log_softmax(x[:1], dim=1)
-            umap = self.kl(x_in, self.m(x[1:]))
-            umap = umap.sum(dim=(0,1), keepdims=True)
+            x_in = F.log_softmax(x[:batch_size], dim=1)
+            umap = self.kl(x_in, self.m(x[batch_size:]))
+            umap = umap.sum(dim=(1), keepdims=True)
             
         elif self.method == 'mse':
             x      = self.m(x)
             x     -= x.min(dim=1, keepdims=True).values
             x     /= x.sum(dim=1, keepdims=True)
-            umap   = torch.pow(x[:1] - x[1:], 2).mean(0, keepdim=True)
+            umap   = torch.pow(x[:batch_size] - x[batch_size:], 2).mean(0, keepdim=True)
             umap   = umap.mean(dim=1, keepdims=True)            
             
         #################################

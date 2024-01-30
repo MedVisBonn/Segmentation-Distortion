@@ -662,14 +662,16 @@ def get_eval_data(
     train_set: bool,
     val_set: bool,
     test_sets: List[str],
-    cfg: OmegaConf
+    cfg: OmegaConf,
+    subset_dict: Optional[dict] = None
 ):
     if cfg.run.data_key == 'brain':
         data = get_brain_eval_data(
             train_set=train_set, 
             val_set=val_set, 
             test_sets=test_sets,
-            cfg=cfg
+            cfg=cfg,
+            subset_dict=subset_dict
         )
     
     elif cfg.run.data_key == 'heart':
@@ -689,7 +691,8 @@ def get_brain_eval_data(
     cfg: OmegaConf,
     train_set: bool,
     val_set: bool,
-    test_sets: List[str] = [],      
+    test_sets: List[str] = [],
+    subset_dict: Optional[dict] = None  
 ):
     """ Instantiates dataloaders for Calgary-Campinas dataset.
 
@@ -711,7 +714,7 @@ def get_brain_eval_data(
 
     if train_set:
         # no volume wise
-        train_set = CalgaryCampinasDataset(
+        data['train'] = CalgaryCampinasDataset(
             data_path=data_path, 
             site=cfg.unet.brain.training.train_site,
             normalize=True, 
@@ -721,14 +724,13 @@ def get_brain_eval_data(
 
     elif val_set:
         # volume wise for image
-        val_set = CalgaryCampinasDataset(
+        data['val'] = CalgaryCampinasDataset(
             data_path=data_path, 
             site=cfg.unet.brain.training.train_site,
             normalize=True, 
             split='validation',
             debug=cfg.debug
         )
-        data['val'] = val_set
 
     for site in test_sets:
         data[str(site)] = CalgaryCampinasDataset(
@@ -739,6 +741,20 @@ def get_brain_eval_data(
             debug=cfg.debug
         )
     assert len(data) > 0, "No data sets selected."
+
+    if subset_dict is not None:
+        data_small = {}
+        for key in data:
+            data_small[f'{key}_small'] = get_subset(
+                dataset=data[key], 
+                model=subset_dict['unet'].cuda(),
+                criterion=nn.BCEWithLogitsLoss(reduction='none'),
+                n_cases=subset_dict['n_cases'],
+                fraction=subset_dict['fraction'],
+                batch_size=32,
+                verbose=True
+            )
+        data = data | data_small
 
     return data
 
@@ -767,18 +783,16 @@ def get_heart_eval_data(
 
     data = {}
     if train_set:
-        train_set = ACDCDataset(
+        data['train'] = ACDCDataset(
             data="train",
             debug=cfg.debug
         )
-        data['train'] = train_set
 
     if val_set:
-        val_set = ACDCDataset(
+        data['val'] = ACDCDataset(
             data="val",
             debug=cfg.debug
         )
-        data['val'] = val_set
 
     for vendor in test_sets:
         data[vendor] = MNMDataset(

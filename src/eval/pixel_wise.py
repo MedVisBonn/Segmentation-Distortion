@@ -30,15 +30,16 @@ def get_precision_recall(
     dataset: Dataset, 
     net_out: str, 
     dae: bool,
-    umap: str, 
-    device='cuda:0'
+    umap: str,
+    n_taus: Union[str, int] = 'auto',
+    device=['cuda:0', 'cpu']
 ):
     if dae == True:
         # Remove trainiung hooks, add evaluation hooks
         model.remove_all_hooks()        
         model.hook_transformations(model.transformations, n_samples=1)
         # Put model in evaluation state
-        model.to(device)
+        model.to(device[0])
         model.eval()
         model.freeze_seg_model()
 
@@ -54,36 +55,45 @@ def get_precision_recall(
     umap_generator = UMapGenerator(
         method=umap,
         net_out=net_out,
-    ).to(device)
+    ).to(device[0])
 
     umaps   = []
     errmaps = []
 
     for _, batch in enumerate(dataloader):
 
-        input_ = batch['input'].to(device)
-        gt = batch['target'].to(device)
+        input_ = batch['input'].to(device[0])
+        gt = batch['target'].to(device[0])
         gt[gt == -1] = 0
         output = model(input_)
 
-        if net_out == 'calgary':
+        if net_out == 'brain':
             segmap = (torch.sigmoid(output[:batch_size]) > 0.5) * 1
             errmap = (gt != segmap).float()
-        elif net_out == 'mms':
+        elif net_out == 'heart':
             segmap = torch.argmax(output[:batch_size], dim=1, keepdims=True)
             errmap = (gt != segmap).float()
 
         umaps.append(umap_generator(output, batch_size=batch_size).cpu())
         errmaps.append(errmap.cpu())
 
-    bprc = BinaryPrecisionRecallCurve()
+    umaps = torch.cat(umaps, dim=0).flatten().half()
+    umaps = (umaps - umaps.min()) / (umaps.max() - umaps.min())
+    errmaps = torch.cat(errmaps, dim=0).flatten().to(torch.uint8)
+    # in case of manual threshold selection
+    if n_taus != 'auto':
+        taus = np.quantile(umaps, torch.linspace(0, 1, n_taus)**(1/16)).tolist()
+    elif n_taus == 'auto':
+        taus = None
+
     # TODO: Change to torcheval once its stable :)
     # bprc = torcheval.metrics.BinaryPrecisionRecallCurve()
-    umaps = torch.cat(umaps, dim=0).flatten()
-    errmaps = torch.cat(errmaps, dim=0).flatten().long()
-    bprc.update(umaps, errmaps)
-    
-    return bprc
+    bprc = BinaryPrecisionRecallCurve(thresholds = taus).cuda()
+    pr = bprc(umaps.to(device[1]), errmaps.to(device[1]))
+    if device[1] != 'cpu':
+        pr = tuple(map(lambda x: x.cpu(), pr))
+
+    return pr
 
 
 
