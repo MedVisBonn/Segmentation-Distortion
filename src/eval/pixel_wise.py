@@ -74,13 +74,13 @@ def get_precision_recall(
         elif net_out == 'heart':
             segmap = torch.argmax(output[:batch_size], dim=1, keepdims=True)
             errmap = (gt != segmap).float()
-
         umaps.append(umap_generator(output, batch_size=batch_size).cpu())
         errmaps.append(errmap.cpu())
 
     umaps = torch.cat(umaps, dim=0).flatten().half()
     umaps = (umaps - umaps.min()) / (umaps.max() - umaps.min())
     errmaps = torch.cat(errmaps, dim=0).flatten().to(torch.uint8)
+
     # in case of manual threshold selection
     if n_taus != 'auto':
         taus = np.quantile(umaps, torch.linspace(0, 1, n_taus)**(1/16)).tolist()

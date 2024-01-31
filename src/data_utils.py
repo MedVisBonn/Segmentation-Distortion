@@ -743,6 +743,7 @@ def get_brain_eval_data(
     assert len(data) > 0, "No data sets selected."
 
     if subset_dict is not None:
+        print('We are subsetting')
         data_subset = {}
         for key in data:
             data_subset[f'{key}_subset'] = get_subset(
@@ -754,7 +755,10 @@ def get_brain_eval_data(
                 batch_size=32,
                 verbose=True
             )
-        data = {**data, **data_subset}
+        if subset_dict['return_original']:
+            data = {**data, **data_subset}
+        else:
+            data = data_subset
 
     return data
 

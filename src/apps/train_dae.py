@@ -23,7 +23,7 @@ def main(
     assert cfg.run is not None, "No run specified. Add +run.data_key=foo +run.iteration=bar to program call."
     assert cfg.run.data_key is not None, "No data_key specified. Add +run.data_key=foo to program call."
     assert cfg.run.iteration is not None, "No iteration specified. Add +run.iteration=foo to program call."
-    assert cfg.run.name is not None, "No name specified. Add +run.name=foo to program call."
+    assert cfg.dae.name is not None, "No name specified. Add +run.name=foo to program call."
 
     # set up wandb
     if cfg.wandb.log:
