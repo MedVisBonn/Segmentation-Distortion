@@ -1,4 +1,5 @@
 
+name: dae
 data:
   training: False
   validation: False

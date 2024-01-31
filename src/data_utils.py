@@ -806,7 +806,6 @@ def get_heart_eval_data(
     
 
 
-
 def get_train_loader(
     training: str,
     cfg: OmegaConf

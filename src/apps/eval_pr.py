@@ -59,18 +59,18 @@ def main(
     model.load_state_dict(state_dict)
 
     if cfg.run.experiment.data.subset.apply or cfg.run.data_key == 'heart':
-        device=['cuda:0', 'cuda:0']
+        device = ['cuda:0', 'cuda:0']
 
     else:
         # In case of calgary w/o subsetting, we need to use cpu for the precision
         # and recall value calculation. Otherwise, we run out of memory.
-        device=['cuda:0', 'cpu']
+        device = ['cuda:0', 'cpu']
         # Additionally, we filter for subsets only.
         data = {key: data[key] for key in data if 'subset' in key}
 
 
     for key in data:
-        result = get_precision_recall(
+        p_sampled, r_sampled, pr_auc = get_precision_recall(
             model=model,
             dataset=data[key],
             net_out=cfg.run.data_key,
@@ -79,6 +79,23 @@ def main(
             device=device,
         )
 
+        df = pd.DataFrame(
+            data={
+                'precision': p_sampled,
+                'recall': r_sampled,
+                'pr_auc': pr_auc,
+                'data_key': cfg.run.data_key,
+                'run': cfg.run.iteration,
+                'domain': key,
+                'method': cfg.run.experiment.name
+            }
+        )
+
+        save_name = f'{cfg.run.data_key}_{cfg.run.experiment.name}_{cfg.run.iteration}_{key}.csv'
+        df.to_scv(save_name)
         #TODO: aggregate and log results, support for other methods
 
+
+if __name__ == "__main__":
+    main()
 
