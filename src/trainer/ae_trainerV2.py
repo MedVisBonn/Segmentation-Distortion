@@ -82,6 +82,10 @@ class AETrainerCalgaryV2:
             assert self.criterion.id_loss == 'huber'
         elif target == 'gt':
             assert self.criterion.id_loss in ['ce', 'bce']
+
+        if self.log:
+            wandb.watch(self.model)
+        
         
         #if self.log:
         #    run = wandb.init(reinit=True, name='log_' + self.description, project='Thesis-VAE')
@@ -363,6 +367,9 @@ class AETrainerACDCV2:
             self.history = {**self.history, **{key: [] for key in self.eval_metrics.keys()}}
         self.training_time = 0
         self.crop   = CenterCrop([256, 256])
+
+        if self.log:
+            wandb.watch(self.model)
         
         
         if target == 'output':

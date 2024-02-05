@@ -20,12 +20,13 @@ def get_daes(
 
     if model == 'unet':
         daes = get_unetDAE(arch)
-    elif model == 'channel':
+    elif model == 'channelDAE':
         daes = get_channelDAE(arch)
     else:
         raise NotImplementedError(f'Model {model} not implemented.')
     
     for layer in disabled_ids:
+        print(f'Disabling layer {layer}.')
         daes[layer] = nn.Identity()
 
     model = FrankensteinV2(
@@ -39,7 +40,7 @@ def get_daes(
         root = cfg.fs.root
         data_key = cfg.run.data_key
         iteration = cfg.run.iteration
-        model_name = f'{data_key}_{cfg.dae.name}{iteration}_best.pt'
+        model_name = f'{data_key}_{cfg.dae.name}_{iteration}_best.pt'
         model_path = f'{root}pre-trained-tmp/trained_AEs/{model_name}'
         state_dict = torch.load(model_path)['model_state_dict']
         return model, state_dict

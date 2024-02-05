@@ -30,10 +30,10 @@ def main(
         run = wandb.init(
             reinit=True, 
             name=cfg.wandb.name if cfg.wandb.name is not None else None,
-            project=cfg.wandb.project, 
-        )
-        run.config = OmegaConf.to_container(
-            cfg, resolve=True, throw_on_missing=True
+            project=cfg.wandb.project,
+            config = OmegaConf.to_container(
+                cfg, resolve=True, throw_on_missing=True
+            )
         )
 
     # get data

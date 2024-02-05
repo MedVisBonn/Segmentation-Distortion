@@ -23,9 +23,11 @@ def main(
     assert cfg.run is not None, "No run specified. Add +run.data_key=foo +run.iteration=bar to program call."
     assert cfg.run.data_key is not None, "No data_key specified. Add +run.data_key=foo to program call."
     assert cfg.run.iteration is not None, "No iteration specified. Add +run.iteration=foo to program call."
-    assert cfg.dae.name is not None, "No name specified. Add +run.name=foo to program call."
+    assert cfg.dae.name is not None, "No name specified. Add +dae.name=foo to program call."
     assert cfg.eval is not None, "No eval specified. Add +eval_key=foo to program call."
 
+    print(OmegaConf.to_yaml(cfg))
+    
     # get segmentation model
     unet, state_dict = get_unet(
         cfg=cfg, 
@@ -52,8 +54,9 @@ def main(
         subset_dict=subset_dict
     )
 
+    print('N cases per domain:')
     for key in data:
-        print(f'{key}: {len(data[key])}')
+        print(f'    {key}: {len(data[key])}')
 
     # get denoising models
     model, state_dict = get_daes(
@@ -69,6 +72,8 @@ def main(
     if (not cfg.eval.data.subset.apply) and (cfg.run.data_key == 'brain'):
         device = ['cuda:0', 'cpu']
 
+
+    dfs = []
     for key in data:
         p_sampled, r_sampled, pr_auc = get_precision_recall(
             model=model,
@@ -79,19 +84,23 @@ def main(
             device=device,
         )
 
-        df = pd.DataFrame(
-            data={
-                'precision': p_sampled,
-                'recall': r_sampled,
-                'pr_auc': pr_auc,
-                'data_key': cfg.run.data_key,
-                'run': cfg.run.iteration,
-                'domain': key,
-                'method': cfg.eval.name
-            }
+        dfs.append(
+            pd.DataFrame(
+                data={
+                    'precision': p_sampled,
+                    'recall': r_sampled,
+                    'pr_auc': pr_auc,
+                    'data_key': cfg.run.data_key,
+                    'run': cfg.run.iteration,
+                    'domain': key,
+                    'method': cfg.dae.name
+                }
+            )
         )
 
-        save_name = f'{cfg.fs.root}results-tmp/{cfg.run.data_key}_{cfg.dae.name}_{cfg.run.iteration}_{key}.csv'
+        df = pd.concat(dfs)
+
+        save_name = f'{cfg.fs.root}results-tmp/{cfg.run.data_key}_{cfg.dae.name}_{cfg.run.iteration}.csv'
         df.to_csv(save_name)
 
 if __name__ == "__main__":

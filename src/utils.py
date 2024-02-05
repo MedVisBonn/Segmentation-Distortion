@@ -111,8 +111,8 @@ class UMapGenerator(nn.Module):
         super().__init__()
         self.method  = method
         self.net_out = net_out
-        self.m       = nn.Softmax(dim=1) if net_out=='mms' else nn.Sigmoid()
-        self.ce      = nn.CrossEntropyLoss(reduction='none') if net_out=='mms' else nn.BCEWithLogitsLoss(reduction='none')
+        self.m       = nn.Softmax(dim=1) if net_out=='heart' else nn.Sigmoid()
+        self.ce      = nn.CrossEntropyLoss(reduction='none') if net_out=='heart' else nn.BCEWithLogitsLoss(reduction='none')
     
     @torch.no_grad()
     def forward(self, x: Tensor, batch_size: int = 1) -> Tensor:
@@ -128,7 +128,7 @@ class UMapGenerator(nn.Module):
         
         if self.method == 'cross_entropy':
             umap = self.ce(x[:batch_size], self.m(x[batch_size:]))
-            umap = umap.mean(dim=1, keepdims=True)
+            # umap = umap.mean(dim=1, keepdims=True)
             
         elif self.method == 'entropy':          
             x_prob = self.m(x[:batch_size])

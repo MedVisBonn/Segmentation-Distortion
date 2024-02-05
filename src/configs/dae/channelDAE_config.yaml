@@ -1,7 +1,7 @@
 
 # Hyperparams
-model: 'channelAE'
-name: 'calgary_channel_up3_res'
+model: 'channelDAE'
+name: 'channel_up3_res'
 arch:
   shortcut0:
     channel: 8
@@ -14,7 +14,7 @@ arch:
     spatial: 128
     latent: 256
     depth: 3
-    block: 01
+    block: 1
   shortcut2:
     channel: 32
     spatial: 64
@@ -26,10 +26,10 @@ arch:
     spatial: 32
     latent: 256
     depth: 3
-    block: 1
+    block: 4
 trainer:
   batch_size: 32
-  augment: False
+  # augment: False
   difference: True
   reconstruction: True
   loss: huber
