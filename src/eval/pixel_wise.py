@@ -99,9 +99,9 @@ def get_precision_recall(
         pr[0][1::len(pr[0])//100], 
         pr[1][1::len(pr[1])//100]
     )
+    p_sampled[0], r_sampled[0] = 1, 0
 
     return p_sampled, r_sampled, pr_auc
-
 
 
 
