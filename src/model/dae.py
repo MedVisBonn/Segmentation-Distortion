@@ -58,7 +58,7 @@ def get_unetDAE(
     daes = nn.ModuleDict({
         layer: UnetDAE(
             in_channels = arch[layer].channel, 
-            num_res_units = arch[layer].num_res_units,
+            num_res_units = arch.num_res_units,
             residual = True  
         ) for layer in arch
     })
@@ -91,14 +91,15 @@ def get_resDAE(
     daes = nn.ModuleDict({
         layer: ResDAE(
             in_channels = arch[layer].channel, 
-            depth       = arch[layer].depth,
+            depth       = arch.depth,
             residual    = True
         ) for layer in arch
     })
 
     return daes
 
-        
+
+
 class ChannelDAE(nn.Module):
     """ Residual Denoising Autoencoder (resDAE) for denoising feature maps.
     """
@@ -132,7 +133,7 @@ class ChannelDAE(nn.Module):
 
     def turn_on(self) -> None:
         self.on = True
-    
+
 
     def forward(self, x: Tensor) -> Tensor:
         if self.on:
@@ -143,7 +144,7 @@ class ChannelDAE(nn.Module):
                 return ae_out
         else:
             return x
-        
+
 
 
 class UnetDAE(nn.Module):
@@ -173,15 +174,15 @@ class UnetDAE(nn.Module):
             num_res_units=num_res_units, 
             up_kernel_size=3
         )
-        
+
 
     def turn_off(self) -> None:
         self.on = False
-    
+
 
     def turn_on(self) -> None:
         self.on = True
-    
+
 
     def forward(self, x: Tensor) -> Tensor:
         if self.on:

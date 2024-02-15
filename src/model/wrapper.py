@@ -10,7 +10,7 @@ class ModelAdapter(nn.Module):
     """Wrapper class for segmentation models and feature transformations.
 
     Wraps (a copy of) the segmentation model and attaches feature
-    trasformations to it via hooks (at potentially various positions
+    trasformations to its swivels via hooks (at potentially various positions
     simultaneously). Additionally, it provides control utilities for the
     hooks as well as different types for inference training and inspection.
     """

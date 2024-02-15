@@ -6,9 +6,9 @@ https://github.com/kechua/DART20/blob/master/damri/model/unet.py
 """
 
 from typing import (
-    Dict, 
-    Tuple, 
-    List, 
+    Dict,
+    Tuple,
+    List,
     Union
 )
 from omegaconf import OmegaConf
@@ -22,59 +22,66 @@ from monai.networks.nets import UNet, SwinUNETR
 
 def get_unet(
     cfg: OmegaConf,
-    return_state_dict=False
+    return_state_dict=False,
+    return_swivels=False
 ) -> Union[nn.Module, Tuple[nn.Module, Dict]]:
-    
-    unet_cfg = cfg.unet[cfg.run.data_key]
+
+    unet_cfg    = cfg.unet[cfg.run.data_key]
+    return_list = []
 
     if unet_cfg.arch == 'default':
-        unet = get_default_unet_arch(cfg)
+        return_list.append(get_default_unet_arch(cfg))
+        if return_swivels:
+            return_list.append({
+                'shortcut0': {'channel': unet_cfg.n_filters_init * 1},
+                'shortcut1': {'channel': unet_cfg.n_filters_init * 2},
+                'shortcut2': {'channel': unet_cfg.n_filters_init * 4},
+                'up3':       {'channel': unet_cfg.n_filters_init * 8},
+            })
+
     elif unet_cfg.arch == 'monai':
-        unet = get_monai_unet_arch(cfg)
+        return_list.append(get_monai_unet_arch(cfg))
+        if return_swivels:
+            return_list.append({
+                f'model.1.{"submodule.1." * i}swivel': {
+                    'channel': unet_cfg.n_filters_init * (2 ** i)
+                } for i in range(unet_cfg.depth)
+            })
+
     elif unet_cfg.arch == 'swinunetr':
-        unet = get_monai_swinunetr_arch(cfg)
+         return_list.append(get_monai_swinunetr_arch(cfg))
 
     if return_state_dict:
         root = cfg.fs.root
         unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.run.iteration}'
         model_path = f'{root}{unet_cfg.training.save_loc}/trained_UNets/{unet_name}_best.pt'
         state_dict = torch.load(model_path)['model_state_dict']
-        return unet, state_dict
-    else:
-        return unet
-    
+        return_list.append(state_dict)
+
+    return return_list
+
+
 
 def get_default_unet_arch(
     cfg: OmegaConf,
-    return_swivels: bool = False
 ):
     unet_cfg       = cfg.unet[cfg.run.data_key]
     n_chans_in     = unet_cfg.n_chans_in
     n_chans_out    = unet_cfg.n_chans_out
     n_filters_init = unet_cfg.n_filters_init
 
-    unet = UNet2D(
+    return UNet2D(
         n_chans_in=n_chans_in, 
         n_chans_out=n_chans_out, 
         n_filters_init=n_filters_init
     )
 
-    # swivels are the attachment points for our denoiser. The
-    # change with the unet architecture (they specify the 
-    # layers by name)
-    if return_swivels:
-        swivels = ['shortcut0', 'shortcut1', 'shortcut2', 'up3']
-        return unet, swivels
-    else:
-        return unet
-
 
 
 def get_monai_unet_arch(
-    cfg: OmegaConf,
-    return_swivels: bool = False
+    cfg: OmegaConf
 ) -> nn.Module:
-    
+
     unet_cfg       = cfg.unet[cfg.run.data_key]
     in_channels    = unet_cfg.n_chans_in
     out_channels   = unet_cfg.n_chans_out
@@ -84,7 +91,7 @@ def get_monai_unet_arch(
     channels       = [n_filters_init * 2 ** i for i in range(depth)]
     strides        = [2] * (depth - 1)
 
-    unet = UNet(
+    return UNet(
         spatial_dims=2,
         in_channels=in_channels,
         out_channels=out_channels,
@@ -92,19 +99,16 @@ def get_monai_unet_arch(
         strides=strides,
         num_res_units=num_res_units
     )
-    if return_swivels:
-        swivels = [
-            f'model.1.{"submodule.1." * i}swivel' for i in range(unet_cfg.depth)
-        ]
-        return unet, swivels
+
 
 
 def get_monai_swinunetr_arch(
-    cfg: OmegaConf
+    cfg: OmegaConf,
+    return_swivels: bool = False
 ) -> nn.Module:
-    unet_cfg       = cfg.unet[cfg.run.data_key]
-    in_channels    = unet_cfg.n_chans_in
-    out_channels   = unet_cfg.n_chans_out
+    unet_cfg     = cfg.unet[cfg.run.data_key]
+    in_channels  = unet_cfg.n_chans_in
+    out_channels = unet_cfg.n_chans_out
 
     return SwinUNETR(
         img_size=(256, 256),
