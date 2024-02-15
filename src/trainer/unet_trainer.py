@@ -18,14 +18,12 @@ from dataset import CalgaryCampinasDataset
 from utils import (
     EarlyStopping, 
     epoch_average, 
-
 )
 from data_utils import (
     slice_selection, 
     dataset_from_indices,
     volume_collate
 )
-from model.unet import UNet2D
 from losses import (
     DiceScoreCalgary, 
     SurfaceDiceCalgary,
@@ -36,7 +34,7 @@ from losses import (
 
 
 def get_unet_trainer(
-    model_cfg, 
+    cfg, 
     train_loader, 
     val_loader,
     model
@@ -45,7 +43,7 @@ def get_unet_trainer(
     Calgary-Campinas dataset 
     
     Args:
-        model_cfg (OmegaConf): model config
+        cfg (OmegaConf): general config with segmentation model information
             Contains the task-specific base config for the model and:
                 log
                 debug
@@ -59,17 +57,17 @@ def get_unet_trainer(
     Returns:
         UNetTrainerACDC or UNetTrainerCalgary: trainer object
     """
-    if model_cfg.data_key == 'heart':
+    if cfg.run.data_key == 'heart':
         trainer = get_unet_heart_trainer(
-            model_cfg, 
+            cfg, 
             train_loader, 
             val_loader,
             model
         )
 
-    elif model_cfg.data_key == 'brain':
+    elif cfg.run.data_key == 'brain':
         trainer = get_unet_brain_trainer(
-            model_cfg, 
+            cfg, 
             train_loader, 
             val_loader,
             model
@@ -83,7 +81,6 @@ def get_unet_trainer(
 
 
 def get_unet_heart_trainer(
-    # model_cfg, 
     cfg,
     train_loader, 
     val_loader,
@@ -92,7 +89,7 @@ def get_unet_heart_trainer(
     """Instaintiates trainer for ACDC dataset
 
     Args:
-        model_cfg (OmegaConf): model config  (see wrapper class for details)
+        cfg (OmegaConf): config  (see wrapper class for details)
         train_loader (DataLoader): training data loader
         val_loader (DataLoader): validation data loader
         model (nn.Module): (unet) model
@@ -101,39 +98,40 @@ def get_unet_heart_trainer(
         UNetTrainerACDC: trainer object
     """
 
-    model_cfg = model_cfg.unet[cfg.data_key]
-    root = cfg.fs.root
-    iteration = cfg.run.iteration
-    log = cfg.wandb.log
+    model_cfg                 = cfg.unet[cfg.run.data_key]
+    num_batches_per_epoch     = model_cfg.training.num_batches_per_epoch
+    num_val_batches_per_epoch = model_cfg.training.num_val_batches_per_epoch
+    description               = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
+    root                      = cfg.fs.root
+    lr                        = model_cfg.training.lr
+    n_epochs                  = model_cfg.training.epochs
+    patience                  = model_cfg.training.patience
+    log                       = cfg.wandb.log
+    save_loc                  = model_cfg.training.save_loc
+    criterion                 = CrossEntropyTargetArgmax()
+    eval_metrics              = {"Volumetric Dice": DiceScoreMMS()}
 
-
-    criterion    = CrossEntropyTargetArgmax()
-    eval_metrics = {
-        "Volumetric Dice": DiceScoreMMS()
-    } 
-    trainer = UNetTrainerACDC(
+    return UNetTrainerACDC(
         model=model, 
         criterion=criterion, 
         train_loader=train_loader, 
         val_loader=val_loader,
-        num_batches_per_epoch=model_cfg.training.num_batches_per_epoch,
-        num_val_batches_per_epoch=model_cfg.training.num_val_batches_per_epoch,
+        num_batches_per_epoch=num_batches_per_epoch,
+        num_val_batches_per_epoch=num_val_batches_per_epoch,
         root=root, 
-        description=model_cfg.pre + str(iteration), 
-        lr=model_cfg.training.lr, 
-        n_epochs=model_cfg.training.epochs, 
-        patience=model_cfg.training.patience, 
-        es_mode='max', 
+        description=description, 
+        lr=lr, 
+        n_epochs=n_epochs, 
+        patience=patience, 
+        es_mode='min', 
         eval_metrics=eval_metrics, 
         log=log, 
-        save_loc=model_cfg.training.save_loc
+        save_loc=save_loc
     )
-    
-    return trainer
+
 
 
 def get_unet_brain_trainer(
-    # model_cfg,
     cfg,
     train_loader, 
     val_loader,
@@ -142,7 +140,7 @@ def get_unet_brain_trainer(
     """Instaintiates trainer for Calgary-Campinas dataset
 
     Args:
-        model_cfg (OmegaConf): model config
+        cfg (OmegaConf): model config
         train_loader (DataLoader): training data loader
         val_loader (DataLoader): validation data loader
         model (nn.Module): (unet) model
@@ -151,36 +149,39 @@ def get_unet_brain_trainer(
         UNetTrainerCalgary: trainer object
     """
 
-    model_cfg = model_cfg.unet[cfg.data_key]
-    root = cfg.fs.root
-    iteration = cfg.run.iteration
-    log = cfg.wandb.log
-
-
-
-    criterion = nn.CrossEntropyLoss()
-    eval_metrics = {
+    model_cfg             = cfg.unet[cfg.run.data_key]
+    description           = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
+    lr                    = model_cfg.training.lr
+    n_epochs              = model_cfg.training.epochs
+    patience              = model_cfg.training.patience
+    num_batches_per_epoch = model_cfg.training.num_batches_per_epoch
+    save_loc              = model_cfg.training.save_loc
+    root                  = cfg.fs.root
+    log                   = cfg.wandb.log
+    # criterion             = nn.CrossEntropyLoss()
+    criterion             = nn.BCEWithLogitsLoss()
+    eval_metrics          = {
         'Volumetric Dice': DiceScoreCalgary(), 
         'Surface Dice': SurfaceDiceCalgary()
     }
-    trainer = UNetTrainerCalgary(
+
+    return UNetTrainerCalgary(
         model=model, 
         criterion=criterion, 
         train_generator=train_loader, 
         val_loader=val_loader, 
         root=root, 
-        description=model_cfg.pre + str(iteration), 
-        lr=model_cfg.training.lr, 
-        n_epochs=model_cfg.training.epochs, 
-        patience=model_cfg.training.patience, 
-        es_mode='max', 
+        description=description,
+        lr=lr, 
+        n_epochs=n_epochs,
+        num_batches_per_epoch=num_batches_per_epoch,
+        patience=patience, 
+        es_mode='min', 
         eval_metrics=eval_metrics, 
         log=log, 
-        save_loc=model_cfg.training.save_loc
+        save_loc=save_loc
     )
     
-    return trainer 
-
 
 
 class UNetTrainerCalgary():
@@ -293,6 +294,7 @@ class UNetTrainerCalgary():
             with autocast():
                 net_out = self.inference_step(input_)
                 loss = self.criterion(net_out, target.to(self.device))
+
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
             nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0, norm_type=2.0)
@@ -532,6 +534,63 @@ class UNetTrainerCalgary():
         
 
 class UNetTrainerACDC():
+    """
+    Trainer class for training and evaluating a U-Net model for ACDC dataset.
+
+    Args:
+        model (nn.Module): The U-Net model.
+        criterion (Callable): The loss function.
+        train_loader (DataLoader): The data loader for training data.
+        val_loader (DataLoader): The data loader for validation data.
+        num_batches_per_epoch (int): The number of batches per epoch for training.
+        num_val_batches_per_epoch (int): The number of batches per epoch for validation.
+        root (str): The root directory.
+        description (str, optional): The description of the trainer. Defaults to 'untitled'.
+        lr (float, optional): The learning rate. Defaults to 1e-4.
+        n_epochs (int, optional): The number of epochs. Defaults to 250.
+        patience (int, optional): The patience for early stopping. Defaults to 5.
+        es_mode (str, optional): The mode for early stopping. Defaults to 'min'.
+        eval_metrics (Dict[str, nn.Module], optional): The evaluation metrics. Defaults to None.
+        log (bool, optional): Whether to log the training process. Defaults to True.
+        device (int, optional): The device to use for training. Defaults to 0.
+        save_loc (str, optional): The directory to save the trained models. Defaults to 'pre-trained-tmp'.
+
+    Attributes:
+        device (int): The device used for training.
+        model (nn.Module): The U-Net model.
+        criterion (Callable): The loss function.
+        train_loader (DataLoader): The data loader for training data.
+        val_loader (DataLoader): The data loader for validation data.
+        num_batches_per_epoch (int): The number of batches per epoch for training.
+        num_val_batches_per_epoch (int): The number of batches per epoch for validation.
+        root (str): The root directory.
+        description (str): The description of the trainer.
+        lr (float): The learning rate.
+        n_epochs (int): The number of epochs.
+        patience (int): The patience for early stopping.
+        es_mode (str): The mode for early stopping.
+        eval_metrics (Dict[str, nn.Module]): The evaluation metrics.
+        save_loc (str): The directory to save the trained models.
+        log (bool): Whether to log the training process.
+        optimizer (torch.optim.Optimizer): The optimizer.
+        scheduler (torch.optim.lr_scheduler.ReduceLROnPlateau): The learning rate scheduler.
+        es (pytorchtools.EarlyStopping): The early stopping object.
+        scaler (torch.cuda.amp.GradScaler): The gradient scaler.
+        history (Dict[str, List[float]]): The training history.
+
+    Methods:
+        inference_step(x): Performs the inference step of the model.
+        save_hist(): Saves the training history to a file.
+        save_model(): Saves the trained model to a file.
+        load_model(): Loads a trained model from a file.
+        train_epoch(): Trains the model for one epoch.
+        get_sample(mode): Gets a sample from the dataset.
+        eval_epoch(): Evaluates the model for one epoch.
+        test_set(testloader): Evaluates the model on the test set.
+        eval_all(cfg): Evaluates the model on all available data.
+        get_subset(dataloader, n_cases, part): Gets a subset of the dataset.
+        plot_history(): Plots the training and validation losses.
+    """
     def __init__(
         self, 
         model: nn.Module, 
@@ -682,11 +741,13 @@ class UNetTrainerACDC():
         for it in range(self.num_val_batches_per_epoch):
             batch = next(self.val_loader)
             input_ = batch['data']
-            target = batch['target'].long().to(self.device)
+            target = batch['target'].long().squeeze(1).to(self.device)
+            # print(target.unique(), target.shape)
             #print(target.shape, input_.shape)
             target = F.one_hot(target, num_classes=4).squeeze(1).permute(0,3,1,2)
             #print(target.shape, input_.shape)
             net_out = self.inference_step(input_)
+            # print(net_out.shape, input_.shape, target.shape)
             loss_list.append(self.criterion(net_out, target).item())
             batch_sizes.append(input_.shape[0])
             #print(input_.shape, target.shape )
@@ -804,6 +865,8 @@ class UNetTrainerACDC():
         ax[0].set_title('Training and Validation Losses')
         
         if 'Volumetric Dice' in self.history:
+            # Add code here to plot the Volumetric Dice metric
+            pass
             loss_array = np.array(self.history['Volumetric Dice'])
             ax[1].plot(self.history['Volumetric Dice'], label='Volumetric Dice', c='teal', lw=3)
             ax[1].set_xlabel("Epoch")

@@ -20,7 +20,6 @@ from utils import (
     epoch_average, 
     average_metrics
 )
-from model.wrapper import FrankensteinV2
 from losses import (
     CalgaryCriterionAE, 
     MNMCriterionAE,

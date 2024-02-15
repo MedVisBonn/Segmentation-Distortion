@@ -24,11 +24,12 @@ unet:
             augment: True
             validation: True
             batch_size: 32
+            num_batches_per_epoch: 250
             epochs: 250
             patience: 4
             lr: 0.001
     heart: 
-        pre: 'acdc_unet8_'
+        pre: 'acdc_unet'
         n_chans_in: 1
         n_filters_init: 8
         n_chans_out: 4

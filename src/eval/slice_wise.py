@@ -514,7 +514,7 @@ class MeanDistSamplesDetector(nn.Module):
         
         # Remove trainiung hooks, add evaluation hooks
         self.model.remove_all_hooks()        
-        self.model.hook_transformations(self.model.transformations,
+        self.model.hook_inference_transformations(self.model.transformations,
                                         n_samples=1)
         
         self.model.eval()

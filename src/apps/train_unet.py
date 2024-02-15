@@ -25,14 +25,15 @@ def main(
 
     # set up wandb
     if cfg.wandb.log:
-        wandb.config = OmegaConf.to_container(
-            cfg, resolve=True, throw_on_missing=True
-        )
         run = wandb.init(
             reinit=True, 
             name=cfg.wandb.name if cfg.wandb.name is not None else None,
-            project=cfg.wandb.project, 
+            project=cfg.wandb.project,
+            config = OmegaConf.to_container(
+                cfg, resolve=True, throw_on_missing=True
+            )
         )
+
         
     # get data
     train_loader, val_loader = get_train_loader(
@@ -41,14 +42,6 @@ def main(
     )
 
     # get model
-    # data_key = cfg.run.data_key
-    # unet_cfg = cfg.unet[data_key]
-    # with open_dict(unet_cfg):
-    #     unet_cfg.log = cfg.wandb.log
-    #     unet_cfg.debug = cfg.debug
-    #     unet_cfg.root = cfg.fs.root
-    #     unet_cfg.data_key = data_key
-    #     unet_cfg.iteration = cfg.run.iteration
     model = get_unet(
         cfg=cfg, 
         return_state_dict=False
@@ -61,7 +54,8 @@ def main(
         model=model,
         cfg=cfg
     )
-    
+
+    # print('Done.')
     trainer.fit()
 
 if __name__ == "__main__":

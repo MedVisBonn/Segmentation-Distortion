@@ -3,8 +3,9 @@ from math import log2
 import torch
 from torch import Tensor, nn
 from model.ae import AE, ChannelAE
+from monai.networks.blocks import ResidualUnit
 from monai.networks.nets import UNet
-from model.wrapper import FrankensteinV2
+from model.wrapper import ModelAdapter
 
 
 
@@ -22,6 +23,8 @@ def get_daes(
         daes = get_unetDAE(arch)
     elif model == 'channelDAE':
         daes = get_channelDAE(arch)
+    elif model == 'resDAE':
+        daes = get_resDAE(arch)
     else:
         raise NotImplementedError(f'Model {model} not implemented.')
     
@@ -29,7 +32,7 @@ def get_daes(
         print(f'Disabling layer {layer}.')
         daes[layer] = nn.Identity()
 
-    model = FrankensteinV2(
+    model = ModelAdapter(
         seg_model=unet,
         transformations=daes,
         disabled_ids=disabled_ids,
@@ -81,51 +84,19 @@ def get_channelDAE(
     return daes
 
 
-class resDAE(nn.Module):
-    """ Residual Denoising Autoencoder (resDAE) for denoising feature maps.
-    """
-    def __init__(
-        self, 
-        in_channels, 
-        in_dim, 
-        latent_dim=128, 
-        depth=3, 
-        latent='dense', 
-        block_size=1,
-        w_prior=2
-    ):
-        super().__init__()
-        self.w_prior = w_prior
-        self.on      = True
-        self.inspect = False
-        
-        self.ae    = AE(in_channels, in_dim, latent_dim=latent_dim, depth=depth, latent=latent, block_size=block_size)
-        self.prior = AE(in_channels, in_dim, latent_dim=latent_dim, depth=depth, latent=latent, block_size=block_size)
 
+def get_resDAE(
+    arch: OmegaConf,
+) -> nn.ModuleDict:
+    daes = nn.ModuleDict({
+        layer: ResDAE(
+            in_channels = arch[layer].channel, 
+            depth       = arch[layer].depth,
+            residual    = True
+        ) for layer in arch
+    })
 
-    def turn_off(self) -> None:
-        self.on = False
-    
-
-    def turn_on(self) -> None:
-        self.on = True
-    
-
-    def forward(self, x: Tensor) -> Tensor:
-        if self.on:
-            # TODO: is this save?
-            if self.training:
-                with torch.no_grad():
-                    x += self.prior(x.detach()) * self.w_prior
-            res = self.ae(x)
-                    
-            if self.inspect:
-                prior = self.prior(x.detach())                
-                return x + res, res, prior
-            else:
-                return x + res
-        else:
-            return x
+    return daes
 
         
 class ChannelDAE(nn.Module):
@@ -153,6 +124,7 @@ class ChannelDAE(nn.Module):
             block_size=block_size,
             residual=True
         )
+
 
     def turn_off(self) -> None:
         self.on = False
@@ -221,3 +193,108 @@ class UnetDAE(nn.Module):
         else:
             return x
 
+
+class ResDAE(nn.Module):
+    """
+    Residual Denoising Autoencoder (ResDAE) model.
+
+    Args:
+        in_channels (int): Number of input channels.
+        depth (int): Number of residual units in the model.
+        residual (bool, optional): Whether to use residual connections. Defaults to True.
+    """
+
+    def __init__(self, in_channels, depth, residual=True):
+        super(ResDAE, self).__init__()
+        self.on = True
+        self.residual = residual
+
+        self.model = nn.ModuleList(
+            ResidualUnit(
+                spatial_dims=2,
+                in_channels=in_channels,
+                out_channels=in_channels,
+                act="PReLU",
+                norm="BATCH",
+                adn_ordering="AN"
+            ) for _ in range(depth)
+        )
+
+    def turn_off(self) -> None:
+        """
+        Turn off the ResDAE model.
+        """
+        self.on = False
+
+    def turn_on(self) -> None:
+        """
+        Turn on the ResDAE model.
+        """
+        self.on = True
+
+    def forward(self, x):
+        """
+        Forward pass of the ResDAE model.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Tensor: Output tensor after passing through the ResDAE model.
+        """
+        if self.on:
+            for layer in self.model:
+                x_out = layer(x)
+            if self.residual:
+                return x + x_out
+            else:
+                return x_out
+        else:
+            return x
+
+
+# class resDAE(nn.Module):
+#     """ Residual Denoising Autoencoder (resDAE) for denoising feature maps.
+#     """
+#     def __init__(
+#         self, 
+#         in_channels, 
+#         in_dim, 
+#         latent_dim=128, 
+#         depth=3, 
+#         latent='dense', 
+#         block_size=1,
+#         w_prior=2
+#     ):
+#         super().__init__()
+#         self.w_prior = w_prior
+#         self.on      = True
+#         self.inspect = False
+        
+#         self.ae    = AE(in_channels, in_dim, latent_dim=latent_dim, depth=depth, latent=latent, block_size=block_size)
+#         self.prior = AE(in_channels, in_dim, latent_dim=latent_dim, depth=depth, latent=latent, block_size=block_size)
+
+
+#     def turn_off(self) -> None:
+#         self.on = False
+    
+
+#     def turn_on(self) -> None:
+#         self.on = True
+    
+
+#     def forward(self, x: Tensor) -> Tensor:
+#         if self.on:
+#             # TODO: is this save?
+#             if self.training:
+#                 with torch.no_grad():
+#                     x += self.prior(x.detach()) * self.w_prior
+#             res = self.ae(x)
+                    
+#             if self.inspect:
+#                 prior = self.prior(x.detach())                
+#                 return x + res, res, prior
+#             else:
+#                 return x + res
+#         else:
+#             return x

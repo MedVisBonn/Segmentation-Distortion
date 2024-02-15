@@ -5,7 +5,8 @@ from typing import (
     List, 
     Tuple,
     Optional,
-    Dict
+    Dict,
+    Union
 )
 import random
 from omegaconf import OmegaConf
@@ -662,7 +663,7 @@ def get_eval_data(
     cfg: OmegaConf,
     train_set: bool = False,
     val_set: bool = False,
-    test_sets: List[str] = [],
+    test_sets: Union[List, str] = [],
     subset_dict: Optional[dict] = None
 ):
     if cfg.run.data_key == 'brain':
@@ -682,7 +683,6 @@ def get_eval_data(
             cfg=cfg
         )
 
-
     return data
 
 
@@ -691,7 +691,7 @@ def get_brain_eval_data(
     cfg: OmegaConf,
     train_set: bool,
     val_set: bool,
-    test_sets: List[str] = [],
+    test_sets: Union[List[int], str] = [],
     subset_dict: Optional[dict] = None  
 ):
     """ Instantiates dataloaders for Calgary-Campinas dataset.
@@ -722,7 +722,7 @@ def get_brain_eval_data(
             debug=cfg.debug
         )
 
-    elif val_set:
+    if val_set:
         # volume wise for image
         data['val'] = CalgaryCampinasDataset(
             data_path=data_path, 
@@ -731,6 +731,9 @@ def get_brain_eval_data(
             split='validation',
             debug=cfg.debug
         )
+
+    if test_sets == 'all':
+        test_sets = [1, 2, 3, 4, 5]
 
     for site in test_sets:
         data[str(site)] = CalgaryCampinasDataset(
@@ -797,6 +800,9 @@ def get_heart_eval_data(
             data="val",
             debug=cfg.debug
         )
+
+    if test_sets == 'all':
+        test_sets = ['A', 'B', 'C', 'D']
 
     for vendor in test_sets:
         data[vendor] = MNMDataset(
@@ -888,7 +894,8 @@ def get_brain_train_loader(
             site=model_cfg.training.train_site,
             normalize=True, 
             volume_wise=True,
-            split='validation'
+            split='validation', 
+            debug=cfg.debug
         )
 
         valid_gen = DataLoader(

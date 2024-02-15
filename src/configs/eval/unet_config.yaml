@@ -1,0 +1,10 @@
+data:
+  training: False
+  validation: False
+  testing: []
+  subset:
+    apply: False
+    params:
+      n_cases: 256
+      fraction: 0.1
+      return_original: False

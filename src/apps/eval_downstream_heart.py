@@ -13,7 +13,7 @@ from dataset import ACDCDataset, MNMDataset
 from model.unet import UNet2D
 from model.ae import AE
 from model.dae import resDAE, AugResDAE
-from model.wrapper import Frankenstein, FrankensteinV2
+from model.wrapper import Frankenstein, ModelAdapter
 from losses import DiceScoreMMS
 from utils import  epoch_average
 
@@ -147,7 +147,7 @@ def main():
          DAEs[layer_id] = nn.Identity()
 
 
-    model = FrankensteinV2(
+    model = ModelAdapter(
         unet, 
         DAEs, 
         disabled_ids=disabled_ids,
@@ -178,7 +178,7 @@ def main():
         # hook transformations such that the model output does only contain
         # the forward pass of the transformed feature maps via the n_samples
         # key word (i.e. setting it to -1)
-        model.hook_transformations(model.transformations, n_samples=-1)
+        model.hook_inference_transformations(model.transformations, n_samples=-1)
         #print(f"Model: {i} - path {ae_path}")
         # loop over all sets
         for key in loader:

@@ -143,7 +143,7 @@ def main():
         # hook transformations such that the model output does only contain
         # the forward pass of the transformed feature maps via the n_samples
         # key word (i.e. setting it to -1)
-        model.hook_transformations(model.transformations, n_samples=-1)        
+        model.hook_inference_transformations(model.transformations, n_samples=-1)        
         print(f"Model: {i} - path {ae_path}")
         # loop over all sets
         for key in loader:

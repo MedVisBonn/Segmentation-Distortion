@@ -778,7 +778,7 @@ def dataset_from_indices(dataset: Dataset, indices: Tensor) -> DataLoader:
 #        
 #        # Remove trainiung hooks, add evaluation hooks
 #        trainer.frankenstein.remove_all_hooks()        
-#        trainer.frankenstein.hook_transformations(trainer.frankenstein.transformations,
+#        trainer.frankenstein.hook_inference_transformations(trainer.frankenstein.transformations,
 #                                                  n_samples=n_samples)
 #        # Put model in evaluation state
 #        trainer.frankenstein.to(device)

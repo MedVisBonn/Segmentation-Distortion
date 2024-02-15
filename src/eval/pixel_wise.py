@@ -38,7 +38,7 @@ def get_precision_recall(
     if dae == True:
         # Remove trainiung hooks, add evaluation hooks
         model.remove_all_hooks()        
-        model.hook_transformations(model.transformations, n_samples=1)
+        model.hook_inference_transformations(model.transformations, n_samples=1)
         # Put model in evaluation state
         model.to(device[0])
         model.eval()
@@ -124,7 +124,7 @@ def get_metrics_from_aes(
     """
     # Remove trainiung hooks, add evaluation hooks
     model.remove_all_hooks()        
-    model.hook_transformations(model.transformations,
+    model.hook_inference_transformations(model.transformations,
                                n_samples=n_samples)
     # Put model in evaluation state
     model.to(device)
