@@ -696,8 +696,8 @@ def get_dae_brain_trainer(
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
         log=cfg.wandb.log,
-        n_epochs=250, 
-        patience=8
+        n_epochs=trainer_config.n_epochs, 
+        patience=trainer_config.patience,
     )
 
     return trainer
@@ -733,8 +733,8 @@ def get_dae_heart_trainer(
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
         log=cfg.wandb.log,
-        n_epochs=250, 
-        patience=8,
+        n_epochs=trainer_config.n_epochs, 
+        patience=trainer_config.patience,
         device=torch.device('cuda')
     )
 

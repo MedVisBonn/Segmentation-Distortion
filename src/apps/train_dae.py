@@ -43,19 +43,16 @@ def main(
     )
 
     # get unet
-    unet, swivels, state_dict = get_unet(
+    unet, state_dict = get_unet(
         cfg=cfg, 
+        update_cfg_with_swivels=True,
         return_state_dict=True,
-        get_swivels=True
     )
     unet.load_state_dict(state_dict)
     
-
     # get dae models
-    ## save swivels from unet to cfg
-    cfg.dae.arch = swivels
     model = get_daes(
-        unet,
+        unet=unet,
         cfg=cfg,
         return_state_dict=False
     )

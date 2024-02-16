@@ -1,3 +1,4 @@
+from typing import List
 from omegaconf import OmegaConf
 from math import log2
 import torch
@@ -15,22 +16,28 @@ def get_daes(
     return_state_dict: bool = False
 )-> nn.ModuleDict:
     
+    # parse disabled_ids from identity_swivels and attachment names
+    cfg.dae.trainer.disabled_ids = [
+        list(cfg.dae.swivels.keys())[i] for i in cfg.dae.identity_swivels
+    ]
+
     model = cfg.dae.model
     arch = cfg.dae.arch
+    swivels = cfg.dae.swivels
     disabled_ids = cfg.dae.trainer.disabled_ids
 
     if model == 'unet':
-        daes = get_unetDAE(arch)
+        daes = get_unetDAE(arch, swivels, disabled_ids)
     elif model == 'channelDAE':
-        daes = get_channelDAE(arch)
-    elif model == 'resDAE':
-        daes = get_resDAE(arch)
+        daes = get_channelDAE(arch, swivels, disabled_ids)
+    elif model == 'ResDAE':
+        daes = get_resDAE(arch, swivels, disabled_ids)
     else:
         raise NotImplementedError(f'Model {model} not implemented.')
     
-    for layer in disabled_ids:
-        print(f'Disabling layer {layer}.')
-        daes[layer] = nn.Identity()
+    for layer, idx in zip(disabled_ids, cfg.dae.identity_swivels):
+        print(f'Disabling layer {layer}, index {idx} in identity_swivels.')
+        daes.append(IdentityHook(layer))
 
     model = ModelAdapter(
         seg_model=unet,
@@ -54,13 +61,14 @@ def get_daes(
 
 def get_unetDAE(
     arch: OmegaConf,
+    disabled_ids: List[str]
 ) -> nn.ModuleDict:
     daes = nn.ModuleDict({
         layer: UnetDAE(
             in_channels = arch[layer].channel, 
             num_res_units = arch.num_res_units,
             residual = True  
-        ) for layer in arch
+        ) for layer in arch if layer not in disabled_ids
     })
 
     return daes
@@ -69,6 +77,7 @@ def get_unetDAE(
 
 def get_channelDAE(
     arch: OmegaConf,
+    disabled_ids: List[str]
 ) -> nn.ModuleDict:
     daes = nn.ModuleDict({
         layer: ChannelDAE(
@@ -78,7 +87,7 @@ def get_channelDAE(
             depth       = arch[layer].depth,
             block_size  = arch[layer].block,
             residual    = True
-        ) for layer in arch
+        ) for layer in arch if layer not in disabled_ids
     })
 
     return daes
@@ -87,17 +96,29 @@ def get_channelDAE(
 
 def get_resDAE(
     arch: OmegaConf,
-) -> nn.ModuleDict:
-    daes = nn.ModuleDict({
-        layer: ResDAE(
-            in_channels = arch[layer].channel, 
+    swivels: OmegaConf,
+    disabled_ids: List[str]
+) -> nn.ModuleList:
+    daes = nn.ModuleList({
+        ResDAE(
+            in_channels = swivels[layer].channel, 
             depth       = arch.depth,
-            residual    = True
-        ) for layer in arch
+            residual    = True,
+            swivel      = layer
+        ) for layer in swivels if layer not in disabled_ids
     })
 
     return daes
 
+
+
+class IdentityHook(nn.Module):
+    def __init__(self, swivel: str):
+        super().__init__()
+        self.swivel = swivel
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x
 
 
 class ChannelDAE(nn.Module):
@@ -205,9 +226,16 @@ class ResDAE(nn.Module):
         residual (bool, optional): Whether to use residual connections. Defaults to True.
     """
 
-    def __init__(self, in_channels, depth, residual=True):
+    def __init__(
+        self, 
+        in_channels, 
+        depth, 
+        swivel,
+        residual=True
+    ):
         super(ResDAE, self).__init__()
         self.on = True
+        self.swivel = swivel
         self.residual = residual
 
         self.model = nn.ModuleList(

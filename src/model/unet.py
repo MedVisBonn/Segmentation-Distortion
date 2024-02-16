@@ -22,43 +22,49 @@ from monai.networks.nets import UNet, SwinUNETR
 
 def get_unet(
     cfg: OmegaConf,
+    update_cfg_with_swivels: bool = False,
     return_state_dict=False,
-    return_swivels=False
 ) -> Union[nn.Module, Tuple[nn.Module, Dict]]:
 
     unet_cfg    = cfg.unet[cfg.run.data_key]
-    return_list = []
 
     if unet_cfg.arch == 'default':
-        return_list.append(get_default_unet_arch(cfg))
-        if return_swivels:
-            return_list.append({
+        unet = get_default_unet_arch(cfg)
+        if update_cfg_with_swivels:
+            swivels = {
                 'shortcut0': {'channel': unet_cfg.n_filters_init * 1},
                 'shortcut1': {'channel': unet_cfg.n_filters_init * 2},
                 'shortcut2': {'channel': unet_cfg.n_filters_init * 4},
                 'up3':       {'channel': unet_cfg.n_filters_init * 8},
-            })
+            }
 
     elif unet_cfg.arch == 'monai':
-        return_list.append(get_monai_unet_arch(cfg))
-        if return_swivels:
-            return_list.append({
+        unet = get_monai_unet_arch(cfg)
+        if update_cfg_with_swivels:
+            swivels = {
                 f'model.1.{"submodule.1." * i}swivel': {
                     'channel': unet_cfg.n_filters_init * (2 ** i)
                 } for i in range(unet_cfg.depth)
-            })
+            }
 
     elif unet_cfg.arch == 'swinunetr':
-         return_list.append(get_monai_swinunetr_arch(cfg))
+         unet = get_monai_swinunetr_arch(cfg)
+
+    if update_cfg_with_swivels:
+        OmegaConf.set_struct(cfg, False)
+        cfg.dae.swivels = swivels
+        OmegaConf.set_struct(cfg, True)
 
     if return_state_dict:
         root = cfg.fs.root
         unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.run.iteration}'
         model_path = f'{root}{unet_cfg.training.save_loc}/trained_UNets/{unet_name}_best.pt'
         state_dict = torch.load(model_path)['model_state_dict']
-        return_list.append(state_dict)
 
-    return return_list
+        return unet, state_dict
+    
+    else:
+        return unet
 
 
 
@@ -104,7 +110,6 @@ def get_monai_unet_arch(
 
 def get_monai_swinunetr_arch(
     cfg: OmegaConf,
-    return_swivels: bool = False
 ) -> nn.Module:
     unet_cfg     = cfg.unet[cfg.run.data_key]
     in_channels  = unet_cfg.n_chans_in
