@@ -6,17 +6,26 @@
 # data sets
 data
 
-# temporary pre-trained models
-pre-trained-tmp
+# models and results
+pre-trained
+results
 
 # temporary results / experiments
+pre-trained-tmp
 results-tmp
-
-# helper functions
 helper-tmp
+
+# local files (e.g. for fiftyone)
+src/demos/tmp
+src/demos/danger/tmp
+src/demos/venus
+src/demos/epinet-recover
 
 # everything related to Weights&Biases
 **/wandb/*
+
+# log files related to Hydra
+**/outputs/*
 
 ### - standard python gitignore provided by github
 

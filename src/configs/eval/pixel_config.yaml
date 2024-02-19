@@ -1,5 +1,5 @@
 
-name: dae
+name: voxel_pr_curve
 data:
   training: False
   validation: False

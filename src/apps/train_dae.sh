@@ -6,7 +6,7 @@ LOG=true
 TRAIN=true
 EVAL=true
 CUDA_DEVICE=1
-DATA_KEY='brain'
+DATA_KEY='heart'
 NAME='default-8'
 
 
@@ -21,7 +21,7 @@ if [ "$TRAIN" = true ]; then
         ++unet."$DATA_KEY".depth="$DEPTH" \
         ++unet."$DATA_KEY".num_res_units="$NUM_RES_UNITS" \
         +dae=resDAE_config \
-        ++dae.name='resDAE_testing' \
+        ++dae.name='heart_resDAE_testing' \
         ++dae.arch.depth=20 \
         ++dae.identity_swivels="[0,1,2]" \
         ++debug=$DEBUG \
@@ -48,5 +48,5 @@ if [ "$EVAL" = true ]; then
         ++eval.data.subset.params.n_cases=256 \
         ++eval.data.training=false \
         ++eval.data.validation=true \
-        ++eval.data.testing="[1,2,3,4,5]" \
+        ++eval.data.testing="[1,2,3,4,5]"
 fi

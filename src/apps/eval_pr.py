@@ -31,6 +31,7 @@ def main(
     # get segmentation model
     unet, state_dict = get_unet(
         cfg=cfg, 
+        update_cfg_with_swivels=True,
         return_state_dict=True
     )
     unet.load_state_dict(state_dict)
@@ -93,14 +94,19 @@ def main(
                     'data_key': cfg.run.data_key,
                     'run': cfg.run.iteration,
                     'domain': key,
-                    'method': cfg.dae.name
+                    'method': cfg.dae.name,
+                    'unet': cfg.unet[cfg.run.data_key].pre,
                 }
             )
         )
 
         df = pd.concat(dfs)
 
-        save_name = f'{cfg.fs.root}results-tmp/{cfg.run.data_key}_{cfg.dae.name}_{cfg.run.iteration}.csv'
+        save_name = f'{cfg.fs.root}results-tmp/' + \
+            f'{cfg.run.data_key}_' + \
+            f'{cfg.dae.name}_' + \
+            f'{cfg.unet[cfg.run.data_key].pre}_' + \
+            f'{cfg.run.iteration}.csv'
         df.to_csv(save_name)
 
 if __name__ == "__main__":
