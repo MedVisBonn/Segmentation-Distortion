@@ -68,6 +68,16 @@ def main(
     # start optimization
     trainer.fit()
 
+    # update W&B config with params that got added during training
+    if cfg.wandb.log:
+        run.config.update(
+            OmegaConf.to_container(
+                cfg, 
+                resolve=True, 
+                throw_on_missing=True
+            )
+        )
+
 
 if __name__ == "__main__":
     main()

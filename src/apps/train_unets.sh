@@ -3,14 +3,14 @@
 
 DEBUG=false
 LOG=true
-CUDA_DEVICE=2
+CUDA_DEVICE=3
 
 TRAIN=true
 EVAL=true
 
 
 for DATA_KEY in 'brain' 'heart'; do
-    for NAME in 'monai-8-4-4' 'monai-16-4-4'; do
+    for NAME in 'monai-32-4-4' 'monai-64-4-4'; do
 
         IFS=- read -r ARCH N_FILTERS_INIT DEPTH NUM_RES_UNITS <<< $NAME
 

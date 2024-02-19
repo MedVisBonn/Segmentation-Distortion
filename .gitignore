@@ -3,6 +3,13 @@
 # Swap files
 *.swp
 
+# accidental data files
+*.csv
+*.json
+*.pkl
+*.pt
+*.npy
+
 # data sets
 data
 
@@ -16,10 +23,10 @@ results-tmp
 helper-tmp
 
 # local files (e.g. for fiftyone)
-src/demos/tmp
-src/demos/danger/tmp
-src/demos/venus
-src/demos/epinet-recover
+src/notebooks/tmp
+src/notebooks/danger/tmp
+src/notebooks/venus
+src/notebooks/epinet-recover
 
 # everything related to Weights&Biases
 **/wandb/*
