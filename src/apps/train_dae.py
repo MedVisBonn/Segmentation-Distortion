@@ -75,7 +75,8 @@ def main(
                 cfg, 
                 resolve=True, 
                 throw_on_missing=True
-            )
+            ),
+            allow_val_change=True
         )
 
 

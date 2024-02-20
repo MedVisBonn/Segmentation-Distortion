@@ -16,7 +16,7 @@ trainer:
   n_epochs: 250
   num_batches_per_epoch: 250
   num_val_batches_per_epoch: 50
-  disabled_ids: [shortcut0, shortcut1, shortcut2]
+  disabled_ids: None
   
 # outputs
 plot_dir: ../experiments/unet/calgary/logs/

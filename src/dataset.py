@@ -356,7 +356,6 @@ class MNMDataset(Dataset):
         self.vendor_keys = [
             key for key in list(self.dataset_info.keys()) if f"_{self.vendor}" in key
         ]
-        print(f'Total Number of slices in Dataset: {len(list(self.dataset_info.keys()))}')
 
     def _load_selected_cases(self) -> None:
         self.data = []

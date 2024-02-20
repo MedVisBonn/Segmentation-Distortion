@@ -26,7 +26,7 @@ def main(
     assert cfg.dae.name is not None, "No name specified. Add +dae.name=foo to program call."
     assert cfg.eval is not None, "No eval specified. Add +eval_key=foo to program call."
 
-    print(OmegaConf.to_yaml(cfg))
+    # print(OmegaConf.to_yaml(cfg))
     
     # get segmentation model
     unet, state_dict = get_unet(
@@ -102,7 +102,7 @@ def main(
 
         df = pd.concat(dfs)
 
-        save_name = f'{cfg.fs.root}results-tmp/' + \
+        save_name = f'{cfg.fs.root}results-tmp/dae-data/' + \
             f'{cfg.run.data_key}_' + \
             f'{cfg.dae.name}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_' + \

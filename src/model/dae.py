@@ -77,15 +77,16 @@ def get_unetDAE(
 
 def get_channelDAE(
     arch: OmegaConf,
+    swivels: OmegaConf,
     disabled_ids: List[str]
 ) -> nn.ModuleDict:
     daes = nn.ModuleDict({
         layer: ChannelDAE(
-            in_channels = arch[layer].channel, 
+            in_channels = swivels[layer].channel, 
             in_dim      = arch[layer].spatial,
-            latent_dim  = arch[layer].latent,
-            depth       = arch[layer].depth,
-            block_size  = arch[layer].block,
+            # latent_dim  = arch[layer].latent,
+            depth       = arch.depth,
+            block_size  = arch.block,
             residual    = True
         ) for layer in arch if layer not in disabled_ids
     })
@@ -128,9 +129,9 @@ class ChannelDAE(nn.Module):
         self, 
         in_channels: int, 
         in_dim: int, 
-        latent_dim: int = 128, 
+        # latent_dim: int = 128, 
         depth: int = 3, 
-        latent: str = 'dense', 
+        # latent: str = 'dense', 
         block_size: int = 1,
         residual: str = True,
     ):
