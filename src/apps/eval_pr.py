@@ -66,7 +66,7 @@ def main(
         return_state_dict=True
     )
     model.load_state_dict(state_dict)
-    
+
     # In case of calgary w/o subsetting, we need to use cpu for the precision
     # and recall value calculation. In all other cases, calculations are done on GPU.
     device = ['cuda:0', 'cuda:0']

@@ -50,6 +50,7 @@ def get_daes(
         root = cfg.fs.root
         data_key = cfg.run.data_key
         iteration = cfg.run.iteration
+        # model_name = f'{data_key}_{cfg.dae.name}_{cfg.unet.data_key.pre}_{iteration}_best.pt'
         model_name = f'{data_key}_{cfg.dae.name}_{iteration}_best.pt'
         model_path = f'{root}pre-trained-tmp/trained_AEs/{model_name}'
         state_dict = torch.load(model_path)['model_state_dict']

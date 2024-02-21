@@ -7,15 +7,15 @@ CUDA_DEVICE=$2
 DEBUG=$3
 ## Globals
 LOG=true
-TRAIN=true
+TRAIN=false
 EVAL=true
 
 for UNET_NAME in 'default-8' 'monai-8-4-4' 'monai-16-4-4' 'default-16' 'monai-32-4-4' 'monai-64-4-4'; do
-#  for UNET_NAME in 'default-8'; do
+# for UNET_NAME in 'monai-8-4-4'; do
     IFS=- read -r UNET_ARCH UNET_N_FILTERS_INIT UNET_DEPTH UNET_NUM_RES_UNITS <<< $UNET_NAME
 
-    for DAE_NAME in 'ResDAE-8' 'ResDAE-32' 'ResDAE-64' ; do
-    # for DAE_NAME in 'ResDAE-8' ; do
+    for DAE_NAME in 'ResDAE-8' 'ResDAE-32' 'ResDAE-128' ; do
+    # for DAE_NAME in 'ResDAE-64' ; do
         # echo "UNET: $UNET_NAME, DAE: $DAE_NAME"
         IFS=- read -r DAE_ARCH DAE_DEPTH <<< $DAE_NAME
 
