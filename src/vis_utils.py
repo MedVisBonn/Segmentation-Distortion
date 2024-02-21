@@ -50,6 +50,10 @@ def plot_pr_eval(
             style='unet',
             ax=axes[i]
         )
+        axes[i].set_title(f'Domain {domain}')
+
+    fig.suptitle(f'{data_key.capitalize()} Data', fontsize=16)
+
     return fig
 
 
