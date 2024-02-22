@@ -5,6 +5,7 @@ import pandas as pd
 
 sys.path.append('../')
 from data_utils import get_eval_data
+from utils import load_state_dict_for_modulelists
 from model.unet import get_unet
 from model.dae import get_daes
 from eval.pixel_wise import get_precision_recall
@@ -65,7 +66,12 @@ def main(
         cfg=cfg, 
         return_state_dict=True
     )
-    model.load_state_dict(state_dict)
+
+    if cfg.dae.placement == 'all':
+        model = load_state_dict_for_modulelists(model, state_dict)
+    elif cfg.dae.placement == 'bottleneck':
+        model.load_state_dict(state_dict)
+    # model.load_state_dict(state_dict)
 
     # In case of calgary w/o subsetting, we need to use cpu for the precision
     # and recall value calculation. In all other cases, calculations are done on GPU.

@@ -3,6 +3,7 @@
 model: 'channelDAE'
 name: 'channel_up3_res'
 identity_swivels: None
+placement: None
 arch:
   spatial: 
     monai: [128, 64, 32, 32]

@@ -11,11 +11,12 @@ TRAIN=true
 EVAL=true
 
 # for UNET_NAME in 'default-8' 'monai-8-4-4' 'monai-16-4-4' 'default-16' 'monai-32-4-4' 'monai-64-4-4'; do
-for UNET_NAME in 'default-8' 'monai-16-4-4'; do
+# for UNET_NAME in 'default-8' 'monai-16-4-4'; do
+for UNET_NAME in 'monai-16-4-4' ; do
     IFS=- read -r UNET_ARCH UNET_N_FILTERS_INIT UNET_DEPTH UNET_NUM_RES_UNITS <<< $UNET_NAME
 
-    # for DAE_NAME in 'ResDAE-8' 'ResDAE-32' 'ResDAE-128' ; do
-    for DAE_NAME in 'ChannelDAE-bottleneck-3-4' 'ChannelDAE-all-3-1' 'ResDAE-all-8' 'ResDAE-all-32'; do
+    # for DAE_NAME in 'ResDAE-8' 'ResDAE-32' 'ResDAE-128' ; do 'ChannelDAE-bottleneck-3-4' 'ChannelDAE-all-3-1' 'ChannelDAE-all-3-1' 'ResDAE-bottleneck-32'
+    for DAE_NAME in 'ChannelDAE-bottleneck-3-4' 'ResDAE-all-32'; do
         # echo "UNET: $UNET_NAME, DAE: $DAE_NAME"
         IFS=- read -r DAE_ARCH PLACEMENT DAE_DEPTH DAE_BLOCK<<< $DAE_NAME
 
@@ -35,7 +36,7 @@ for UNET_NAME in 'default-8' 'monai-16-4-4'; do
                 ++dae.arch.block="$DAE_BLOCK" \
                 ++debug="$DEBUG" \
                 ++wandb.log="$LOG" \
-                ++wandb.name="DAE_${DATA_KEY}_${DAE_NAME}"
+                ++wandb.name="DAE_${DATA_KEY}_${UNET_NAME}_${DAE_NAME}"
         fi
 
         if [ "$EVAL" = true ]; then

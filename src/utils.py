@@ -1,4 +1,4 @@
-import os
+import os, sys
 import random
 from typing import (
     Iterable, 
@@ -451,7 +451,33 @@ def dataset_from_indices(dataset: Dataset, indices: Tensor) -> DataLoader:
     return CustomDataset(*data.values())
 
 
+ 
+def load_state_dict_for_modulelists(model, state_dict):
 
+    seg_model_dict = model.seg_model.state_dict()
+    seg_model_dict_pretrained = {
+        k.replace('seg_model.', ''): v for k, v in state_dict.items() if k.replace('seg_model.', '') in seg_model_dict
+    }
+    model.seg_model.load_state_dict(seg_model_dict_pretrained)
+
+    counter = 0
+    for i in range(4):
+        transformation_state_dict = model.transformations[i].state_dict()
+        for j in range(4):
+            try:
+                transformation_state_dict_pretrained = {
+                    k.replace(f'transformations.{j}.', ''): v for k, v in state_dict.items() if k.replace(f'transformations.{j}.', '') in transformation_state_dict
+                }
+                model.transformations[i].load_state_dict(transformation_state_dict_pretrained)
+                counter += 1
+            except:
+                pass
+    if counter == 4:
+        print('All transformations loaded')
+    else:
+        sys.exit()
+
+    return model
 #from trainer import Trainer
 
 
