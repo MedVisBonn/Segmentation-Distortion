@@ -16,6 +16,14 @@ def get_daes(
     return_state_dict: bool = False
 )-> nn.ModuleDict:
     
+    if cfg.dae.placement == 'bottleneck':
+        cfg.dae.identity_swivels = [
+            i for i in range(0, len(cfg.dae.swivels.keys())-1)
+        ]
+
+    elif cfg.dae.placement == 'all':
+        cfg.dae.identity_swivels = []
+
     # parse disabled_ids from identity_swivels and attachment names
     cfg.dae.trainer.disabled_ids = [
         list(cfg.dae.swivels.keys())[i] for i in cfg.dae.identity_swivels
@@ -29,6 +37,11 @@ def get_daes(
     if model == 'unet':
         daes = get_unetDAE(arch, swivels, disabled_ids)
     elif model == 'channelDAE':
+        data_key = cfg.run.data_key
+        if 'monai' in cfg.unet[data_key].pre:
+            arch.spatial = arch.spatial.monai
+        elif 'default' in cfg.unet[data_key].pre:
+            arch.spatial = arch.spatial.default
         daes = get_channelDAE(arch, swivels, disabled_ids)
     elif model == 'ResDAE':
         daes = get_resDAE(arch, swivels, disabled_ids)
@@ -50,8 +63,9 @@ def get_daes(
         root = cfg.fs.root
         data_key = cfg.run.data_key
         iteration = cfg.run.iteration
-        # model_name = f'{data_key}_{cfg.dae.name}_{cfg.unet.data_key.pre}_{iteration}_best.pt'
-        model_name = f'{data_key}_{cfg.dae.name}_{iteration}_best.pt'
+        model_name = f'{data_key}_{cfg.dae.name}_' + \
+            f'{cfg.unet[cfg.run.data_key].pre}_{iteration}_best.pt'
+        # model_name = f'{data_key}_{cfg.dae.name}_{iteration}_best.pt'
         model_path = f'{root}pre-trained-tmp/trained_AEs/{model_name}'
         state_dict = torch.load(model_path)['model_state_dict']
         return model, state_dict
@@ -81,15 +95,19 @@ def get_channelDAE(
     swivels: OmegaConf,
     disabled_ids: List[str]
 ) -> nn.ModuleDict:
-    daes = nn.ModuleDict({
-        layer: ChannelDAE(
+    for i, layer in enumerate(swivels.keys()):
+        if layer not in disabled_ids:
+            print(f"{arch.spatial[i]}, {swivels[layer].channel}")
+
+    daes = nn.ModuleList({
+        ChannelDAE(
             in_channels = swivels[layer].channel, 
-            in_dim      = arch[layer].spatial,
-            # latent_dim  = arch[layer].latent,
+            in_dim      = arch.spatial[i],
             depth       = arch.depth,
             block_size  = arch.block,
+            swivel      = layer,
             residual    = True
-        ) for layer in arch if layer not in disabled_ids
+        ) for i, layer in enumerate(swivels.keys()) if layer not in disabled_ids
     })
 
     return daes
@@ -128,23 +146,21 @@ class ChannelDAE(nn.Module):
     """
     def __init__(
         self, 
-        in_channels: int, 
-        in_dim: int, 
-        # latent_dim: int = 128, 
+        in_channels: int,
+        in_dim: int,
+        swivel: str,
         depth: int = 3, 
-        # latent: str = 'dense', 
         block_size: int = 1,
         residual: str = True,
     ):
         super().__init__()
         self.on = True
+        self.swivel = swivel
         self.residual = residual
         self.ae = ChannelAE(
             in_channels, 
             in_dim, 
-#            latent_dim=latent_dim, 
             depth=depth, 
-#            latent=latent, 
             block_size=block_size,
             residual=True
         )

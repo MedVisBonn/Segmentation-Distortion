@@ -2,6 +2,7 @@
 # Hyperparams
 model: 'ResDAE'
 name: 'None'
+identity_swivels: None
 arch:
   depth: 20
 trainer:

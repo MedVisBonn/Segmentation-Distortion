@@ -2,31 +2,37 @@
 # Hyperparams
 model: 'channelDAE'
 name: 'channel_up3_res'
+identity_swivels: None
 arch:
-  shortcut0:
-    channel: 8
-    spatial: 256
-    latent: 256
-    depth: 3
-    block: 1
-  shortcut1:
-    channel: 16
-    spatial: 128
-    latent: 256
-    depth: 3
-    block: 1
-  shortcut2:
-    channel: 32
-    spatial: 64
-    latent: 256
-    depth: 3
-    block: 1
-  up3:
-    channel: 64
-    spatial: 32
-    latent: 256
-    depth: 3
-    block: 4
+  spatial: 
+    monai: [128, 64, 32, 32]
+    default: [256, 128, 64, 32]
+  depth: 3
+  block: 2
+  # shortcut0:
+  #   channel: 8
+  #   spatial: 256
+  #   latent: 256
+  #   depth: 3
+  #   block: 1
+  # shortcut1:
+  #   channel: 16
+  #   spatial: 128
+  #   latent: 256
+  #   depth: 3
+  #   block: 1
+  # shortcut2:
+  #   channel: 32
+  #   spatial: 64
+  #   latent: 256
+  #   depth: 3
+  #   block: 1
+  # up3:
+  #   channel: 64
+  #   spatial: 32
+  #   latent: 256
+  #   depth: 3
+  #   block: 4
 trainer:
   batch_size: 32
   # augment: False
