@@ -5,6 +5,7 @@ name: 'None'
 identity_swivels: None
 arch:
   depth: 20
+  residual: false
 trainer:
   batch_size: 32
   # augment: False

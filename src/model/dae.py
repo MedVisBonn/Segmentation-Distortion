@@ -63,8 +63,9 @@ def get_daes(
         root = cfg.fs.root
         data_key = cfg.run.data_key
         iteration = cfg.run.iteration
-        model_name = f'{data_key}_{cfg.dae.name}_' + \
+        model_name = f'{data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_{iteration}_best.pt'
+        model_name = model_name.replace('__', '')
         # model_name = f'{data_key}_{cfg.dae.name}_{iteration}_best.pt'
         model_path = f'{root}pre-trained-tmp/trained_AEs/{model_name}'
         state_dict = torch.load(model_path)['model_state_dict']
@@ -82,7 +83,7 @@ def get_unetDAE(
         layer: UnetDAE(
             in_channels = arch[layer].channel, 
             num_res_units = arch.num_res_units,
-            residual = True  
+            residual = arch.residual  
         ) for layer in arch if layer not in disabled_ids
     })
 
@@ -106,7 +107,7 @@ def get_channelDAE(
             depth       = arch.depth,
             block_size  = arch.block,
             swivel      = layer,
-            residual    = True
+            residual    = arch.residual,
         ) for i, layer in enumerate(swivels.keys()) if layer not in disabled_ids
     })
 
@@ -123,7 +124,7 @@ def get_resDAE(
         ResDAE(
             in_channels = swivels[layer].channel, 
             depth       = arch.depth,
-            residual    = True,
+            residual    = arch.residual,
             swivel      = layer
         ) for layer in swivels if layer not in disabled_ids
     })
@@ -262,7 +263,7 @@ class ResDAE(nn.Module):
                 in_channels=in_channels,
                 out_channels=in_channels,
                 act="PReLU",
-                norm="BATCH",
+                norm=("instance", {"affine": True}), # "BATCH",
                 adn_ordering="AN"
             ) for _ in range(depth)
         )

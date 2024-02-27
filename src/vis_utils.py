@@ -35,6 +35,7 @@ def plot_pr_eval(
 
     if len(unets) == 1:
         df['method_with_auc'] = df.apply(lambda row: f"{row['method']} ({row['pr_auc']:.3f})", axis=1)
+    df['domain'] = df['domain'].str.replace('_subset', '', regex=False)
 
     # Creating the figure and axes for the subplots
     n = df['domain'].nunique()
@@ -53,6 +54,7 @@ def plot_pr_eval(
         axes[i].set_title(f'Domain {domain}')
 
     fig.suptitle(f'{data_key.capitalize()} Data', fontsize=16)
+    # plt.close(fig)
 
     return fig
 

@@ -683,6 +683,9 @@ def get_dae_brain_trainer(
         'UNet Volumetric Dice': UnetDice(data='calgary')
     }
 
+    description=f'{cfg.run.data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
+            f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}'
+    description=description.replace('__', '')
     trainer = AETrainerCalgaryV2(
         model=model, 
         criterion=criterion,
@@ -692,8 +695,7 @@ def get_dae_brain_trainer(
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
         root=cfg.fs.root,
         target=trainer_config.target,
-        description=f'{cfg.run.data_key}_{cfg.dae.name}_' + \
-            f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}',
+        description=description,
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
         log=cfg.wandb.log,

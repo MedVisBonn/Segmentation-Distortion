@@ -100,7 +100,7 @@ def main(
                     'data_key': cfg.run.data_key,
                     'run': cfg.run.iteration,
                     'domain': key,
-                    'method': cfg.dae.name,
+                    'method': f'{cfg.dae.name}_{cfg.dae.postfix}',
                     'unet': cfg.unet[cfg.run.data_key].pre,
                 }
             )
@@ -111,8 +111,10 @@ def main(
         save_name = f'{cfg.fs.root}results-tmp/dae-data/' + \
             f'{cfg.run.data_key}_' + \
             f'{cfg.dae.name}_' + \
+            f'{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_' + \
             f'{cfg.run.iteration}.csv'
+        save_name = save_name.replace('__', '_')
         df.to_csv(save_name)
 
 if __name__ == "__main__":
