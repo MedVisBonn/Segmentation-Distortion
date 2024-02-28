@@ -65,7 +65,7 @@ def get_daes(
         iteration = cfg.run.iteration
         model_name = f'{data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_{iteration}_best.pt'
-        model_name = model_name.replace('__', '')
+        model_name = model_name.replace('__', '_')
         # model_name = f'{data_key}_{cfg.dae.name}_{iteration}_best.pt'
         model_path = f'{root}pre-trained-tmp/trained_AEs/{model_name}'
         state_dict = torch.load(model_path)['model_state_dict']
@@ -120,14 +120,14 @@ def get_resDAE(
     swivels: OmegaConf,
     disabled_ids: List[str]
 ) -> nn.ModuleList:
-    daes = nn.ModuleList({
+    daes = nn.ModuleList([
         ResDAE(
             in_channels = swivels[layer].channel, 
             depth       = arch.depth,
             residual    = arch.residual,
             swivel      = layer
         ) for layer in swivels if layer not in disabled_ids
-    })
+    ])
 
     return daes
 
