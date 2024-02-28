@@ -83,23 +83,38 @@ def get_precision_recall(
 
     # in case of manual threshold selection
     if n_taus != 'auto':
-        taus = np.quantile(umaps, torch.linspace(0, 1, n_taus)**(1/16)).tolist()
+        # taus = np.quantile(umaps, torch.linspace(0, 1, n_taus)**(1/16)).tolist()
+        taus = np.quantile(umaps, torch.linspace(0, 1, n_taus)).tolist()
     elif n_taus == 'auto':
         taus = None
 
     # TODO: Change to torcheval once its stable :)
     # bprc = torcheval.metrics.BinaryPrecisionRecallCurve()
-    bprc = BinaryPrecisionRecallCurve(thresholds = taus).cuda()
+    bprc = BinaryPrecisionRecallCurve(thresholds = taus).to(device[1])
     pr = bprc(umaps.to(device[1]), errmaps.to(device[1]))
     if device[1] != 'cpu':
         pr = tuple(map(lambda x: x.cpu(), pr))
 
     pr_auc = auc(pr[1], pr[0])
-    p_sampled, r_sampled = (
-        pr[0][1::len(pr[0])//100], 
-        pr[1][1::len(pr[1])//100]
+
+    # subset precision/recall to 100 points for plotting
+    # we find indices along the x axis (recall) such that they
+    # have roughly equal distance to each other and select the 
+    # corresponding y values (precision)
+    p, r, _= pr  
+    # find indices for sorting in recall
+    indices = np.argsort(r)
+    # sort precision and recall similarly
+    r_sorted, p_sorted = (r[indices], p[indices])
+    # select target values for recall
+    target_values = np.linspace(r_sorted[0], r_sorted[-1], 100)
+    # find best matches in sorted recall, that are smaller or equal to the target values
+    subset_indices = np.abs(r_sorted[None, :] - target_values[:, None]).argmin(axis=1)
+    # select precision and recall at the best matches
+    r_sampled, p_sampled = (
+        r_sorted[subset_indices], 
+        p_sorted[subset_indices]
     )
-    p_sampled[0], r_sampled[0] = 1, 0
 
     return p_sampled, r_sampled, pr_auc
 

@@ -88,6 +88,7 @@ def main(
             net_out=cfg.run.data_key,
             dae=True,
             umap='cross_entropy',
+            n_taus='auto',
             device=device,
         )
 
@@ -108,14 +109,17 @@ def main(
 
         df = pd.concat(dfs)
 
-        save_name = f'{cfg.fs.root}results-tmp/dae-data/' + \
-            f'{cfg.run.data_key}_' + \
+        save_dir = f'{cfg.fs.root}results-tmp/dae-data/'
+        save_name = f'{cfg.run.data_key}_' + \
             f'{cfg.dae.name}_' + \
             f'{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_' + \
             f'{cfg.run.iteration}.csv'
+        
+        if cfg.debug:
+            save_name = 'debug_' + save_name
         save_name = save_name.replace('__', '_')
-        df.to_csv(save_name)
+        df.to_csv(save_dir + save_name)
 
 if __name__ == "__main__":
     main()
