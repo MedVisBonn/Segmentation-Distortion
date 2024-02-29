@@ -4,8 +4,9 @@ FROM nvcr.io/nvidia/pytorch:23.07-py3
 # ARG uid
 
 ### - install standard capabilities
-RUN apt-get update
+RUN apt-get update && apt-get upgrade
 RUN apt-get install -y \
+	htop \
 	git \
 	vim \
 	binutils \
