@@ -23,18 +23,31 @@ RUN apt-get install -y \
 #RUN conda install matplotlib
 
 ### - PIP
-RUN pip install wandb deep-pipe scikit-learn torchmetrics tqdm 
+RUN pip install \ 
+	wandb \
+	deep-pipe \
+	scikit-learn \
+	torchmetrics \
+	tqdm \
+	omegaconf \
+	seaborn \
+	monai
 
 ### - GIT
 ## setup
 # move nvidia-stuff to separate folder
 WORKDIR /workspace
 RUN mv * nvidia | mkdir nvidia
-# set working directory to designated repo dire
-WORKDIR /workspace/repos
 ## segmentation distortion
+WORKDIR /workspace/repos
 RUN git clone https://github.com/MedVisBonn/Segmentation-Distortion.git
+WORKDIR /workspace/repos/Segmentation-Distortion
+RUN mkdir -p pre-trained
+RUN mkdir -p pre-trained-tmp
+RUN mkdir -p results
+RUN mkdir -p results-tmp
 ## surface distances
+WORKDIR /workspace/repos
 RUN git clone https://github.com/deepmind/surface-distance.git
 RUN pip install surface-distance/
 ## nnUNet
