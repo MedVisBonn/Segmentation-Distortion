@@ -792,12 +792,16 @@ def get_heart_eval_data(
     if train_set:
         data['train'] = ACDCDataset(
             data="train",
+            root=cfg.fs.root,
+            folder=cfg.data.heart.acdc.data_path,
             debug=cfg.debug
         )
 
     if val_set:
         data['val'] = ACDCDataset(
             data="val",
+            root=cfg.fs.root,
+            folder=cfg.data.heart.acdc.data_path,
             debug=cfg.debug
         )
 
