@@ -7,10 +7,12 @@ docker run \
 	-it \
 	--net=host \
 	--runtime=nvidia \
+    --gpus all \
+    --privileged \
 	--ipc=host \
 	--mount type=bind,source="/home/lennartz/data/conp-dataset",target=/data/conp-dataset \
 	--mount type=bind,source="/home/lennartz/data/nnUNet_preprocessed",target=/data/nnUNet_preprocessed \
-	--mount type=bind,source="/home/lennartz/docker-projects/segmentation-distortion/out",target=/out \
+	--mount type=bind,source="/home/lennartz/docker-projects/segmentation-distortion/out",target=/workspace/out \
 	segmentation-distortion
 	#96740278c511
 
