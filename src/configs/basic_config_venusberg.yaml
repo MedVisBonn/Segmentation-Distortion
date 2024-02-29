@@ -5,7 +5,7 @@ wandb:
     log: True
     project: 'MICCAI2023-extension'
 fs: 
-    root: '../../../../'
+    root: '../../../../../'
 data: 
     brain: 
         data_path: 'data/conp-dataset/projects/calgary-campinas/CC359/Reconstructed/'
@@ -16,14 +16,14 @@ data:
             data_path: 'data/nnUNet_preprocessed/Task679_MNM/'
 
 
-unet: 
+unet:
+    folder: '../../pre-trained'
     brain: 
         pre: 'calgary_unet'
         n_chans_in: 1
         n_filters_init: 8
         n_chans_out: 1
         training: 
-            save_loc: 'pre-trained'
             train_site: 6
             augment: True
             validation: True
@@ -38,7 +38,6 @@ unet:
         n_filters_init: 8
         n_chans_out: 4
         training: 
-            save_loc: 'pre-trained'
             augment: True
             validation: True
             batch_size: 32
