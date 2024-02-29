@@ -629,7 +629,7 @@ def get_subset(
         input_  = batch['input'].to(device)
         target  = batch['target'].to(device)
         net_out = model(input_)
-        loss    = criterion(net_out, target).view(input_.shape[0], -1).mean(1)
+        loss    = criterion(net_out, target).view(input_.shape[0], -1).mean(1).cpu()
         loss_list.append(loss)
         
     loss_tensor = torch.cat(loss_list)
