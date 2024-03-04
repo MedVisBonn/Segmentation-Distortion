@@ -32,7 +32,9 @@ RUN pip install \
 	tqdm \
 	omegaconf \
 	seaborn \
-	monai
+	monai 
+
+RUN pip install hydra-core --upgrade
 
 ### - GIT
 ## setup
