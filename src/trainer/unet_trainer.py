@@ -22,7 +22,6 @@ from utils import (
 from data_utils import (
     slice_selection, 
     dataset_from_indices,
-    volume_collate
 )
 from losses import (
     DiceScoreCalgary, 
@@ -47,7 +46,8 @@ def get_unet_trainer(
             Contains the task-specific base config for the model and:
                 log
                 debug
-                root
+                weight_dir
+                log_dir
                 data_key
                 iteration
         train_loader (DataLoader): training data loader
@@ -102,7 +102,8 @@ def get_unet_heart_trainer(
     num_batches_per_epoch     = model_cfg.training.num_batches_per_epoch
     num_val_batches_per_epoch = model_cfg.training.num_val_batches_per_epoch
     description               = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
-    root                      = cfg.fs.root
+    weight_dir                = cfg.unet.weight_dir,
+    log_dir                   = cfg.unet.log_dir, 
     lr                        = model_cfg.training.lr
     n_epochs                  = model_cfg.training.epochs
     patience                  = model_cfg.training.patience
@@ -118,7 +119,8 @@ def get_unet_heart_trainer(
         val_loader=val_loader,
         num_batches_per_epoch=num_batches_per_epoch,
         num_val_batches_per_epoch=num_val_batches_per_epoch,
-        root=root, 
+        weight_dir=weight_dir,
+        log_dir=log_dir, 
         description=description, 
         lr=lr, 
         n_epochs=n_epochs, 
@@ -156,7 +158,8 @@ def get_unet_brain_trainer(
     patience              = model_cfg.training.patience
     num_batches_per_epoch = model_cfg.training.num_batches_per_epoch
     save_loc              = model_cfg.training.save_loc
-    root                  = cfg.fs.root
+    weight_dir            = cfg.unet.weight_dir,
+    log_dir               = cfg.unet.log_dir,
     log                   = cfg.wandb.log
     # criterion             = nn.CrossEntropyLoss()
     criterion             = nn.BCEWithLogitsLoss()
@@ -170,7 +173,8 @@ def get_unet_brain_trainer(
         criterion=criterion, 
         train_generator=train_loader, 
         val_loader=val_loader, 
-        root=root, 
+        weight_dir=weight_dir,
+        log_dir=log_dir,
         description=description,
         lr=lr, 
         n_epochs=n_epochs,
@@ -191,7 +195,8 @@ class UNetTrainerCalgary():
         criterion: Callable, 
         train_generator: DataLoader,
         val_loader: DataLoader, 
-        root: str, 
+        weight_dir: str,
+        log_dir: str,
         description: str = 'untitled', 
         lr: float = 1e-4, 
         n_epochs: int = 250,
@@ -208,7 +213,8 @@ class UNetTrainerCalgary():
         self.criterion    = criterion
         self.train_generator = train_generator
         self.val_loader = val_loader 
-        self.root         = root
+        self.weight_dir   = weight_dir
+        self.log_dir      = log_dir
         self.description  = description
         self.lr           = lr
         self.num_batches_per_epoch = num_batches_per_epoch
@@ -238,20 +244,19 @@ class UNetTrainerCalgary():
     
     
     def save_hist(self):
-        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
-            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
-        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
+        if(not os.path.exists(self.log_dir)):
+            os.makedirs(self.log_dir)
+        savepath = f'{self.log_dir}{self.description}.npy'
         np.save(savepath, self.history)
         
         return
     
     
     def save_model(self):
-        if(not os.path.exists(f'{self.root}{self.save_loc}/trained_UNets')):
-            os.makedirs(f'{self.root}{self.save_loc}/trained_UNets')
-        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
-            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
-        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
+        if(not os.path.exists(self.weight_dir)):
+            os.makedirs(self.weight_dir)
+
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
@@ -262,18 +267,19 @@ class UNetTrainerCalgary():
     
     
     def load_model(self):
-        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
+        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
+        print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
+        savepath = f'{self.weight_dir}{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
-        try:
-            savepath = f'{self.root}results/unet/metrics_{self.description}.npy'
-            self.evaluation = np.load(savepath, allow_pickle='TRUE').item()
-        except:
-            print("No metrics found")
+        # try:
+        #     savepath = f'{self.root}results/unet/metrics_{self.description}.npy'
+        #     self.evaluation = np.load(savepath, allow_pickle='TRUE').item()
+        # except:
+        #     print("No metrics found")
         
         return
     
@@ -404,48 +410,48 @@ class UNetTrainerCalgary():
         return epoch_metrics
     
     
-    @torch.no_grad()
-    def eval_all(self, cfg) -> dict:
-        data_path = cfg['root'] + cfg['data_path']
-        metrics = {}
+    # @torch.no_grad()
+    # def eval_all(self, cfg) -> dict:
+    #     data_path = cfg['root'] + cfg['data_path']
+    #     metrics = {}
         
-        train_site = cfg['train_site']
-        test_sites = [site for site in [1,2,3,4,5,6] if site != train_site]
+    #     train_site = cfg['train_site']
+    #     test_sites = [site for site in [1,2,3,4,5,6] if site != train_site]
         
-        for split in ['train', 'validation']:
-            dataset = CalgaryCampinasDataset(data_path=data_path, 
-                                             site=train_site, 
-                                             normalize=True, 
-                                             volume_wise=True, 
-                                             debug=cfg['debug'],
-                                             split=split)
+    #     for split in ['train', 'validation']:
+    #         dataset = CalgaryCampinasDataset(data_path=data_path, 
+    #                                          site=train_site, 
+    #                                          normalize=True, 
+    #                                          volume_wise=True, 
+    #                                          debug=cfg['debug'],
+    #                                          split=split)
             
-            dataloader = DataLoader(dataset, 
-                                    batch_size=1, 
-                                    shuffle=False, 
-                                    drop_last=False, 
-                                    collate_fn=volume_collate)
+    #         dataloader = DataLoader(dataset, 
+    #                                 batch_size=1, 
+    #                                 shuffle=False, 
+    #                                 drop_last=False, 
+    #                                 collate_fn=volume_collate)
             
-            metrics['Site ' + split + str(train_site)] = self.test_set(dataloader)
+    #         metrics['Site ' + split + str(train_site)] = self.test_set(dataloader)
             
         
-        for site in test_sites:
-            dataset = CalgaryCampinasDataset(data_path=data_path, 
-                                             site=site, 
-                                             normalize=True, 
-                                             volume_wise=True, 
-                                             debug=cfg['debug'],
-                                             split='all')
+    #     for site in test_sites:
+    #         dataset = CalgaryCampinasDataset(data_path=data_path, 
+    #                                          site=site, 
+    #                                          normalize=True, 
+    #                                          volume_wise=True, 
+    #                                          debug=cfg['debug'],
+    #                                          split='all')
             
-            dataloader = DataLoader(dataset, 
-                                    batch_size=1, 
-                                    shuffle=False, 
-                                    drop_last=False, 
-                                    collate_fn=volume_collate)
+    #         dataloader = DataLoader(dataset, 
+    #                                 batch_size=1, 
+    #                                 shuffle=False, 
+    #                                 drop_last=False, 
+    #                                 collate_fn=volume_collate)
             
-            metrics['Site ' + str(site)] = self.test_set(dataloader)
+    #         metrics['Site ' + str(site)] = self.test_set(dataloader)
             
-        return metrics
+    #     return metrics
     
 
     def plot_history(self):
@@ -544,7 +550,8 @@ class UNetTrainerACDC():
         val_loader (DataLoader): The data loader for validation data.
         num_batches_per_epoch (int): The number of batches per epoch for training.
         num_val_batches_per_epoch (int): The number of batches per epoch for validation.
-        root (str): The root directory.
+        weight_dir (str): The directory to save the trained models.
+        log_dir (str): The directory to save the training history.
         description (str, optional): The description of the trainer. Defaults to 'untitled'.
         lr (float, optional): The learning rate. Defaults to 1e-4.
         n_epochs (int, optional): The number of epochs. Defaults to 250.
@@ -563,7 +570,8 @@ class UNetTrainerACDC():
         val_loader (DataLoader): The data loader for validation data.
         num_batches_per_epoch (int): The number of batches per epoch for training.
         num_val_batches_per_epoch (int): The number of batches per epoch for validation.
-        root (str): The root directory.
+        weight_dir (str): The directory to save the trained models.
+        log_dir (str): The directory to save the training history.
         description (str): The description of the trainer.
         lr (float): The learning rate.
         n_epochs (int): The number of epochs.
@@ -599,7 +607,9 @@ class UNetTrainerACDC():
         val_loader: DataLoader,
         num_batches_per_epoch,
         num_val_batches_per_epoch,
-        root: str, 
+        # root: str,
+        weight_dir: str,
+        log_dir: str,
         description: str = 'untitled', 
         lr: float = 1e-4, 
         n_epochs: int = 250, 
@@ -618,7 +628,9 @@ class UNetTrainerACDC():
         self.val_loader = val_loader
         self.num_batches_per_epoch = num_batches_per_epoch
         self.num_val_batches_per_epoch = num_val_batches_per_epoch
-        self.root         = root
+        # self.root         = root
+        self.weight_dir   = weight_dir
+        self.log_dir      = log_dir
         self.description  = description
         self.lr           = lr
         self.n_epochs     = n_epochs
@@ -647,20 +659,19 @@ class UNetTrainerACDC():
     
     
     def save_hist(self):
-        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
-            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
-        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
+        if(not os.path.exists(self.log_dir)):
+            os.makedirs(self.log_dir)
+        savepath = f'{self.log_dir}{self.description}.npy'
         np.save(savepath, self.history)
         
         return
     
     
     def save_model(self):
-        if(not os.path.exists(f'{self.root}{self.save_loc}/trained_UNets')):
-            os.makedirs(f'{self.root}{self.save_loc}/trained_UNets')
-        if(not os.path.exists(f'{self.root}{self.save_loc}/trainer_logs')):
-            os.makedirs(f'{self.root}{self.save_loc}/trainer_logs')
-        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
+        if(not os.path.exists(self.weight_dir)):
+            os.makedirs(self.weight_dir)
+
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
@@ -671,18 +682,13 @@ class UNetTrainerACDC():
     
     
     def load_model(self):
-        savepath = f'{self.root}{self.save_loc}/trained_UNets/{self.description}_best.pt'
+        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
+        print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.root}{self.save_loc}/trainer_logs/{self.description}.npy'
+        savepath = f'{self.weight_dir}{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
-        
-        try:
-            savepath = f'{self.root}results/unet/metrics_{self.description}.npy'
-            self.evaluation = np.load(savepath, allow_pickle='TRUE').item()
-        except:
-            print("No metrics found")
         
         return
     

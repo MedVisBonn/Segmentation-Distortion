@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import hydra
 from omegaconf import OmegaConf
 import pandas as pd
@@ -109,7 +109,7 @@ def main(
 
         df = pd.concat(dfs)
 
-        save_dir = f'{cfg.fs.root}results-tmp/dae-data/'
+        save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
         save_name = f'{cfg.run.data_key}_' + \
             f'{cfg.dae.name}_' + \
             f'{cfg.dae.postfix}_' + \
@@ -118,9 +118,10 @@ def main(
         
         if cfg.debug:
             save_name = 'debug_' + save_name
+        if(not os.path.exists(save_dir)):
+            os.makedirs(save_dir)
         save_name = save_name.replace('__', '_')
         df.to_csv(save_dir + save_name)
 
 if __name__ == "__main__":
     main()
-

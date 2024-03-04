@@ -5,6 +5,7 @@ wandb:
     log: True
     project: 'MICCAI2023-extension'
 fs: 
+    repo_root: '../../'
     root: '../../../../../'
 data: 
     brain: 
@@ -17,7 +18,8 @@ data:
 
 
 unet:
-    folder: '../../pre-trained'
+    weight_dir: '../../pre-trained/trained_UNets/'
+    log_dir: '../../pre-trained/trainer_logs/'
     brain: 
         pre: 'calgary_unet'
         n_chans_in: 1

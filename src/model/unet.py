@@ -72,7 +72,7 @@ def get_unet(
 
     if return_state_dict:
         unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.run.iteration}'
-        model_path = f'{cfg.unet.folder}/trained_UNets/{unet_name}_best.pt'
+        model_path = f'{cfg.unet.weight_dir}{unet_name}_best.pt'
         state_dict = torch.load(model_path)['model_state_dict']
 
         return unet, state_dict
