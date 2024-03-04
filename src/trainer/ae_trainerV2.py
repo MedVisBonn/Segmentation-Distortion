@@ -40,7 +40,9 @@ class AETrainerCalgaryV2:
         num_batches_per_epoch: int,
         num_val_batches_per_epoch: int,
         description: str,
-        root: str,
+        # root: str,
+        weight_dir: str,
+        log_dir: str,
         target: str = 'output', #gt
         lr: float = 5e-4,
         n_epochs: int = 1000, 
@@ -58,7 +60,9 @@ class AETrainerCalgaryV2:
         self.valid_loader = valid_loader
         self.num_batches_per_epoch = num_batches_per_epoch
         self.num_val_batches_per_epoch = num_val_batches_per_epoch
-        self.root         = root
+        # self.root         = root
+        self.weight_dir   = weight_dir
+        self.log_dir      = log_dir
         self.description  = description
         self.target       = target
         self.lr           = lr
@@ -202,20 +206,19 @@ class AETrainerCalgaryV2:
     
     
     def save_hist(self):
-        if(not os.path.exists(self.root+'results-tmp/trainer_logs')):
-            os.makedirs(self.root+'results-tmp/trainer_logs')
-        savepath = f'{self.root}results-tmp/trainer_logs/{self.description}.npy'
+        if(not os.path.exists(self.log_dir)):
+            os.makedirs(self.log_dir)
+        savepath = f'{self.log_dir}{self.description}.npy'
         np.save(savepath, self.history)
         
         return
     
     
     def save_model(self):
-        if(not os.path.exists(self.root+'pre-trained-tmp/trained_AEs')):
-            os.makedirs(self.root+'pre-trained-tmp/trained_AEs')
-        if(not os.path.exists(self.root+'results-tmp/trainer_logs')):
-            os.makedirs(self.root+'results-tmp/trainer_logs')
-        savepath = f'{self.root}pre-trained-tmp/trained_AEs/{self.description}_best.pt'
+        if(not os.path.exists(self.weight_dir)):
+            os.makedirs(self.weight_dir)
+
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
@@ -226,12 +229,12 @@ class AETrainerCalgaryV2:
     
     
     def load_model(self):
-        savepath = f'{self.root}pre-trained-tmp/trained_AEs/{self.description}_best.pt'
+        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
         print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.root}results-tmp/trainer_logs/{self.description}.npy'
+        savepath = f'{self.weight_dir}{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
         return
@@ -328,7 +331,9 @@ class AETrainerACDCV2:
         num_batches_per_epoch: int, 
         num_val_batches_per_epoch: int, 
         description: str,
-        root: str,
+        # root: str,
+        weight_dir: str,
+        log_dir: str,
         target: str = 'output', #gt
         lr: float = 5e-4,
         n_epochs: int = 1000, 
@@ -347,7 +352,8 @@ class AETrainerACDCV2:
         self.valid_loader = valid_loader
         self.num_batches_per_epoch = num_batches_per_epoch
         self.num_val_batches_per_epoch = num_val_batches_per_epoch
-        self.root         = root
+        self.weight_dir   = weight_dir
+        self.log_dir      = log_dir
         self.description  = description
         self.target       = target
         self.lr           = lr
@@ -522,20 +528,18 @@ class AETrainerACDCV2:
     
     
     def save_hist(self):
-        if(not os.path.exists(self.root+'results-tmp/trainer_logs')):
-            os.makedirs(self.root+'results-tmp/trainer_logs')
-        savepath = f'{self.root}results-tmp/trainer_logs/{self.description}.npy'
+        if(not os.path.exists(self.log_dir)):
+            os.makedirs(self.log_dir)
+        savepath = f'{self.log_dir}{self.description}.npy'
         np.save(savepath, self.history)
         
         return
     
     
     def save_model(self):
-        if(not os.path.exists(self.root+'pre-trained-tmp/trained_AEs')):
-            os.makedirs(self.root+'pre-trained-tmp/trained_AEs')
-        if(not os.path.exists(self.root+'results-tmp/trainer_logs')):
-            os.makedirs(self.root+'results-tmp/trainer_logs')
-        savepath = f'{self.root}pre-trained-tmp/trained_AEs/{self.description}_best.pt'
+        if(not os.path.exists(self.weight_dir)):
+            os.makedirs(self.weight_dir)
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
@@ -546,12 +550,12 @@ class AETrainerACDCV2:
     
     
     def load_model(self):
-        savepath = f'{self.root}pre-trained-tmp/trained_AEs/{self.description}_best.pt'
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.root}results-tmp/trainer_logs/{self.description}.npy'
+        savepath = f'{self.log_dir}{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
         return
@@ -693,7 +697,8 @@ def get_dae_brain_trainer(
         valid_loader=val_loader,
         num_batches_per_epoch=trainer_config.num_batches_per_epoch,
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
-        root=cfg.fs.root,
+        weight_dir=cfg.dae.weight_dir,
+        log_dir=cfg.dae.log_dir,
         target=trainer_config.target,
         description=description,
         lr=trainer_config.lr, 
@@ -722,7 +727,9 @@ def get_dae_heart_trainer(
         'Sample Volumetric Dice': SampleDice(data='MNM'),
         'UNet Volumetric Dice': UnetDice(data='MNM')
     }
-
+    description=f'{cfg.run.data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
+            f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}'
+    description=description.replace('__', '')
     trainer = AETrainerACDCV2(
         model=model, 
         criterion=criterion, 
@@ -730,10 +737,10 @@ def get_dae_heart_trainer(
         valid_loader=val_loader,
         num_batches_per_epoch=trainer_config.num_batches_per_epoch,
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
-        root=cfg.fs.root,
+        weight_dir=cfg.dae.weight_dir,
+        log_dir=cfg.dae.log_dir,        
         target=trainer_config.target,
-        description=f'{cfg.run.data_key}_{cfg.dae.name}_' + \
-            f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}',
+        description=description,
         lr=trainer_config.lr, 
         eval_metrics=eval_metrics, 
         log=cfg.wandb.log,

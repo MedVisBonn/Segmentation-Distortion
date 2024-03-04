@@ -9,7 +9,7 @@ DAE_POSTFIX=$4
 DAE_RESIDUAL=$5
 ## Globals
 LOG=true
-TRAIN=true
+TRAIN=false
 EVAL=true
 ## Model params
 # DAE_POSTFIX='instance'
@@ -28,6 +28,7 @@ for UNET_NAME in 'default-8' 'monai-16-4-4'; do
 
         if [ "$TRAIN" = true ]; then
             CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python train_dae.py \
+                -cn basic_config_venusberg \
                 +run.iteration=0 \
                 +run.data_key="$DATA_KEY" \
                 ++unet."$DATA_KEY".pre="$UNET_NAME" \
@@ -49,6 +50,7 @@ for UNET_NAME in 'default-8' 'monai-16-4-4'; do
 
         if [ "$EVAL" = true ]; then
             CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python eval_pr.py \
+                -cn basic_config_venusberg \
                 +run.iteration=0 \
                 +run.data_key="$DATA_KEY" \
                 ++unet."$DATA_KEY".pre="$UNET_NAME" \

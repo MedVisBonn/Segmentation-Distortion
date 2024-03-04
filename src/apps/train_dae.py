@@ -13,7 +13,7 @@ from trainer.ae_trainerV2 import get_dae_trainer
 
 @hydra.main(
     config_path='../configs', 
-    config_name='basic_config.yaml',
+    config_name='basic_config_venusberg.yaml',
     version_base=None
 )
 def main(
@@ -24,6 +24,9 @@ def main(
     assert cfg.run.data_key is not None, "No data_key specified. Add +run.data_key=foo to program call."
     assert cfg.run.iteration is not None, "No iteration specified. Add +run.iteration=foo to program call."
     assert cfg.dae.name is not None, "No name specified. Add +run.name=foo to program call."
+
+
+    print(OmegaConf.to_yaml(cfg))
 
     # set up wandb
     if cfg.wandb.log:

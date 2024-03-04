@@ -45,6 +45,7 @@ from batchgenerators.transforms.abstract_transforms import (
     Compose,
     AbstractTransform
 )
+from batchgenerators.dataloading.single_threaded_augmenter import SingleThreadedAugmenter
 from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
 
 from dataset import *
@@ -962,7 +963,9 @@ def get_heart_train_loader(
     transforms = Transforms()
     train_set = ACDCDataset(
         data="train",
-        debug=cfg.debug
+        debug=cfg.debug,
+        root=cfg.fs.root,
+        folder=cfg.data.heart.acdc.data_path
     )
     train_loader = MultiImageSingleViewDataLoader(
         data=train_set,
@@ -970,17 +973,26 @@ def get_heart_train_loader(
         return_orig=return_orig
     )    
     train_augmentor = transforms.get_transforms(train_transform_key)
-    train_gen = MultiThreadedAugmenter(
+    # train_gen = MultiThreadedAugmenter(
+    #     data_loader = train_loader,
+    #     transform = train_augmentor,
+    #     num_processes = 1,
+    #     num_cached_per_queue = 1,
+    #     seeds=None
+    # )
+    train_gen = SingleThreadedAugmenter(
         data_loader = train_loader,
         transform = train_augmentor,
-        num_processes = 4,
-        num_cached_per_queue = 2,
-        seeds=None
+        # num_processes = 1,
+        # num_cached_per_queue = 1,
+        # seeds=None
     )
     
     val_set = ACDCDataset(
         data="val",
-        debug=cfg['debug']
+        debug=cfg['debug'],
+        root=cfg.fs.root,
+        folder=cfg.data.heart.acdc.data_path
     )
     valid_loader = MultiImageSingleViewDataLoader(
         data=val_set, 
@@ -988,12 +1000,19 @@ def get_heart_train_loader(
         return_orig=return_orig
     )
     valid_augmentor = transforms.get_transforms(val_transform_key)
-    valid_gen = MultiThreadedAugmenter(
+    # valid_gen = MultiThreadedAugmenter(
+    #     data_loader = valid_loader, 
+    #     transform = valid_augmentor, 
+    #     num_processes = 4, 
+    #     num_cached_per_queue = 2, 
+    #     seeds=None
+    # )
+    valid_gen = SingleThreadedAugmenter(
         data_loader = valid_loader, 
         transform = valid_augmentor, 
-        num_processes = 4, 
-        num_cached_per_queue = 2, 
-        seeds=None
+        # num_processes = 4, 
+        # num_cached_per_queue = 2, 
+        # seeds=None
     )
     
     return train_gen, valid_gen

@@ -30,5 +30,9 @@ trainer:
   num_val_batches_per_epoch: 50
   disabled_ids: [shortcut0, shortcut1, shortcut2]
 
+# weights
+weight_dir: '../../pre-trained-tmp/trained_AEs/'
+log_dir: '../../pre-trained-tmp/trainer_logs/'
+
 # outputs
 plot_dir: ../experiments/unet/calgary/logs/
