@@ -229,7 +229,7 @@ class AETrainerCalgaryV2:
     
     
     def load_model(self):
-        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])

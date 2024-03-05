@@ -108,7 +108,6 @@ def get_unet_heart_trainer(
     n_epochs                  = model_cfg.training.epochs
     patience                  = model_cfg.training.patience
     log                       = cfg.wandb.log
-    save_loc                  = model_cfg.training.save_loc
     criterion                 = CrossEntropyTargetArgmax()
     eval_metrics              = {"Volumetric Dice": DiceScoreMMS()}
 
@@ -128,7 +127,6 @@ def get_unet_heart_trainer(
         es_mode='min', 
         eval_metrics=eval_metrics, 
         log=log, 
-        save_loc=save_loc
     )
 
 
@@ -157,7 +155,6 @@ def get_unet_brain_trainer(
     n_epochs              = model_cfg.training.epochs
     patience              = model_cfg.training.patience
     num_batches_per_epoch = model_cfg.training.num_batches_per_epoch
-    save_loc              = model_cfg.training.save_loc
     weight_dir            = cfg.unet.weight_dir,
     log_dir               = cfg.unet.log_dir,
     log                   = cfg.wandb.log
@@ -183,7 +180,6 @@ def get_unet_brain_trainer(
         es_mode='min', 
         eval_metrics=eval_metrics, 
         log=log, 
-        save_loc=save_loc
     )
     
 
@@ -206,7 +202,6 @@ class UNetTrainerCalgary():
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None,
         log: bool = True,
-        save_loc: str = 'pre-trained-tmp'
     ):
         self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model        = model.to(self.device)
@@ -223,7 +218,6 @@ class UNetTrainerCalgary():
         self.es_mode      = es_mode
         self.eval_metrics = eval_metrics
         self.log          = log
-        self.save_loc     = save_loc
         self.optimizer    = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self.scheduler    = ReduceLROnPlateau(self.optimizer, 'min', patience=self.patience)
         self.es           = EarlyStopping(mode=self.es_mode, patience=2*self.patience)
@@ -560,7 +554,6 @@ class UNetTrainerACDC():
         eval_metrics (Dict[str, nn.Module], optional): The evaluation metrics. Defaults to None.
         log (bool, optional): Whether to log the training process. Defaults to True.
         device (int, optional): The device to use for training. Defaults to 0.
-        save_loc (str, optional): The directory to save the trained models. Defaults to 'pre-trained-tmp'.
 
     Attributes:
         device (int): The device used for training.
@@ -578,7 +571,6 @@ class UNetTrainerACDC():
         patience (int): The patience for early stopping.
         es_mode (str): The mode for early stopping.
         eval_metrics (Dict[str, nn.Module]): The evaluation metrics.
-        save_loc (str): The directory to save the trained models.
         log (bool): Whether to log the training process.
         optimizer (torch.optim.Optimizer): The optimizer.
         scheduler (torch.optim.lr_scheduler.ReduceLROnPlateau): The learning rate scheduler.
@@ -619,7 +611,6 @@ class UNetTrainerACDC():
         eval_metrics: Dict[str, nn.Module] = None,
         log: bool = True,
         device = 0,
-        save_loc = 'pre-trained-tmp'
     ):
         self.device       = device
         self.model        = model.to(self.device)
@@ -637,7 +628,6 @@ class UNetTrainerACDC():
         self.patience     = patience
         self.es_mode      = es_mode
         self.eval_metrics = eval_metrics
-        self.save_loc     = save_loc
         self.log          = log
         self.optimizer    = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self.scheduler    = ReduceLROnPlateau(self.optimizer, 'min', patience=self.patience)

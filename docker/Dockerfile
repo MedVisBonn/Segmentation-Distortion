@@ -60,11 +60,11 @@ RUN pip install -e .
 # set up variables for nnUnet
 WORKDIR /
 RUN mkdir -p /data/nnUNet_raw
-ENV nnUNet_raw="/data/nnUNet_raw"
+ENV nnUNet_raw_data_base="/data/nnUNet_raw"
 RUN mkdir -p /data/nnUNet_preprocessed
 ENV nnUNet_preprocessed="/data/nnUNet_preprocessed"
 RUN mkdir -p /results/nnUNet_results
-ENV nnUNet_results="/results/nnUNet_results"
+ENV RESULTS_FOLDER ="/results/nnUNet_results"
 
 ### - CLEANUP
 RUN apt-get autoremove -y && rm -rf /tmp/* /var/tmp/* && apt-get clean && rm -rf /var/lib/apt/lists/*
