@@ -15,8 +15,6 @@ data:
             data_path: 'data/nnUNet_preprocessed/Task500_ACDC/'
         mnm:
             data_path: 'data/nnUNet_preprocessed/Task679_MNM/'
-
-
 unet:
     weight_dir: '../../pre-trained/trained_UNets/'
     log_dir: '../../pre-trained/trainer_logs/'
