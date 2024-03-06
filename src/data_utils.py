@@ -1159,12 +1159,12 @@ def get_heart_train_loader(
     # train_transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
     if training == 'dae':
         return_orig = True
-        transform_key = 'local_transforms'
+        train_transform_key = 'local_transforms'
         val_transform_key = 'local_val_transforms'
 
     elif training == 'unet':
         return_orig = False
-        transform_key = 'all_transforms'
+        train_transform_key = 'all_transforms'
         val_transform_key = 'io_transforms'
     
     # val_transform_key = 'local_val_transforms' if training == 'dae' else 'io_transforms'

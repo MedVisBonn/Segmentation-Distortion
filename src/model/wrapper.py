@@ -122,9 +122,9 @@ class ModelAdapter(nn.Module):
                 x_in_new = transformation(x_in)
                 return x_in_new
             else:
-                x_in_new = x_in.unsqueeze(1).repeat(1, n_samples, 1, 1, 1).flatten(0, 1)
-                x_in_new = transformation(x_in_new)
-                return torch.cat([x_in, x_in_new], dim=0)
+                x_in_denoised = x_in.unsqueeze(1).repeat(1, n_samples, 1, 1, 1).flatten(0, 1)
+                x_in_denoised = transformation(x_in_denoised)
+                return torch.cat([x_in, x_in_denoised], dim=0)
 
         return hook
     
