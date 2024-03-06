@@ -1,0 +1,57 @@
+
+# Hyperparams
+model: 'compressionDAE'
+name: 'channel_up3_res'
+identity_swivels: None
+placement: None
+arch:
+  spatial: 
+    monai: [128, 64, 32, 32]
+    default: [256, 128, 64, 32]
+  depth: 3
+  block: 2
+  latent_dim: 128
+  # shortcut0:
+  #   channel: 8
+  #   spatial: 256
+  #   latent: 256
+  #   depth: 3
+  #   block: 1
+  # shortcut1:
+  #   channel: 16
+  #   spatial: 128
+  #   latent: 256
+  #   depth: 3
+  #   block: 1
+  # shortcut2:
+  #   channel: 32
+  #   spatial: 64
+  #   latent: 256
+  #   depth: 3
+  #   block: 1
+  # up3:
+  #   channel: 64
+  #   spatial: 32
+  #   latent: 256
+  #   depth: 3
+  #   block: 4
+trainer:
+  batch_size: 32
+  # augment: False
+  difference: True
+  reconstruction: True
+  loss: huber
+  target: output
+  lr: 1e-4
+  patience: 8
+  n_epochs: 250
+  num_batches_per_epoch: 250
+  num_val_batches_per_epoch: 50
+  disabled_ids: [shortcut0, shortcut1, shortcut2]
+
+# weights
+weight_dir: '../../pre-trained-tmp/trained_AEs/'
+log_dir: '../../pre-trained-tmp/trainer_logs/'
+
+# outputs
+plot_dir: ../experiments/unet/calgary/logs/

@@ -43,6 +43,13 @@ def get_daes(
         elif 'default' in cfg.unet[data_key].pre:
             arch.spatial = arch.spatial.default
         daes = get_channelDAE(arch, swivels, disabled_ids)
+    elif model == 'compressionDAE':
+        data_key = cfg.run.data_key
+        if 'monai' in cfg.unet[data_key].pre:
+            arch.spatial = arch.spatial.monai
+        elif 'default' in cfg.unet[data_key].pre:
+            arch.spatial = arch.spatial.default
+        daes = get_compressionDAE(arch, swivels, disabled_ids)
     elif model == 'ResDAE':
         daes = get_resDAE(arch, swivels, disabled_ids)
     else:
@@ -113,6 +120,26 @@ def get_channelDAE(
 
     return daes
 
+
+def get_compressionDAE(
+    arch: OmegaConf,
+    swivels: OmegaConf,
+    disabled_ids: List[str]
+) -> nn.ModuleDict:
+    
+    daes = nn.ModuleList({
+        CompressionDAE(
+            in_channels = swivels[layer].channel, 
+            in_dim      = arch.spatial[i],
+            depth       = arch.depth,
+            block_size  = arch.block,
+            latent_dim  = arch.latent_dim,
+            swivel      = layer,
+            residual    = arch.residual,
+        ) for i, layer in enumerate(swivels.keys()) if layer not in disabled_ids
+    })
+
+    return daes
 
 
 def get_resDAE(
@@ -185,6 +212,51 @@ class ChannelDAE(nn.Module):
         else:
             return x
 
+
+class CompressionDAE(nn.Module):
+    """ Regular AE with vector bottleneck.
+    """
+    def __init__(
+        self, 
+        in_channels: int,
+        in_dim: int,
+        latent_dim: int,
+        swivel: str,
+        depth: int = 3, 
+        block_size: int = 1,
+        residual: str = True,
+    ):
+        super().__init__()
+        self.on = True
+        self.swivel = swivel
+        self.residual = residual
+        self.ae = AE(
+            in_channels, 
+            in_dim, 
+            depth=depth, 
+            block_size=block_size,
+            latent_dim=latent_dim,
+            latent = "dense",
+        )
+
+    def turn_off(self) -> None:
+        self.on = False
+    
+
+    def turn_on(self) -> None:
+        self.on = True
+
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.on:
+            ae_out = self.ae(x)
+            if self.residual: 
+                return x + ae_out
+            else:
+                return ae_out
+        else:
+            return x
+        
 
 
 class UnetDAE(nn.Module):
