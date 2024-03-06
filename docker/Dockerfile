@@ -57,6 +57,8 @@ RUN pip install surface-distance/
 RUN git clone --branch nnunetv1 https://github.com/MIC-DKFZ/nnUNet.git
 WORKDIR /workspace/repos/nnUNet
 RUN pip install -e .
+# remove annoying print statements from init
+RUN sed -i '2,6d' nnunet/__init__.py
 # set up variables for nnUnet
 WORKDIR /
 RUN mkdir -p /data/nnUNet_raw
@@ -64,7 +66,7 @@ ENV nnUNet_raw_data_base="/data/nnUNet_raw"
 RUN mkdir -p /data/nnUNet_preprocessed
 ENV nnUNet_preprocessed="/data/nnUNet_preprocessed"
 RUN mkdir -p /results/nnUNet_results
-ENV RESULTS_FOLDER ="/results/nnUNet_results"
+ENV RESULTS_FOLDER="/results/nnUNet_results"
 
 ### - CLEANUP
 RUN apt-get autoremove -y && rm -rf /tmp/* /var/tmp/* && apt-get clean && rm -rf /var/lib/apt/lists/*
