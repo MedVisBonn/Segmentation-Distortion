@@ -572,7 +572,12 @@ def slice_selection(
 
     
     kmeans_in = slices.reshape(len(indices), -1)
-    kmeans = KMeans(n_clusters=n_cases).fit(kmeans_in)
+    kmeans = KMeans(
+        n_clusters=n_cases,
+        init='k-means++',
+        n_init=1,
+        algorithm='elkan',
+        ).fit(kmeans_in)
     idx, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, kmeans_in)
     return indices[idx]
 
@@ -603,7 +608,7 @@ def dataset_from_indices(
         
     return CustomDataset(*data.values())
 
-
+from time import time
 
 @torch.no_grad()
 def get_subset(
@@ -636,6 +641,8 @@ def get_subset(
 #         n_cases = len(dataset)
     
     # collect evaluation per slice and cache
+    print(f'{dataset.folder}:')
+    start = time()
     assert criterion.reduction == 'none'
     model.eval()
     loss_list = []
@@ -648,7 +655,8 @@ def get_subset(
         
     loss_tensor = torch.cat(loss_list)
     assert len(loss_tensor.shape) == 1
-    
+    print(f'It took {(time() - start):.2f} seconds to collect all dice scores')
+    start = time()
     # get indices from loss function values
     indices = torch.argsort(loss_tensor, descending=True)
     # set some params for slicing
@@ -658,7 +666,8 @@ def get_subset(
     if part == 'tail':
         indices = indices[:len_ // devisor]
     elif part == 'head':
-        indices = indices[-len_ // devisor:]   
+        indices = indices[-len_ // devisor:]
+    print(f'It took {(time() - start):.2f} seconds to sort them')
     # select slices within fraction of dataset based on kmeans
     indices_selection = slice_selection(
         dataset,
@@ -666,6 +675,7 @@ def get_subset(
         n_cases=n_cases,
         verbose=verbose
     )
+    print(f'It took {(time() - start):.2f} seconds to determine center clusters.\n')
     # build dataset from selected slices and return
     subset = dataset_from_indices(dataset, indices_selection)
 
@@ -1046,8 +1056,15 @@ def get_brain_train_loader(
         valid_gen (MultiThreadedAugmenter): Validation data generator.
     """
 
-    return_orig = True if training == 'dae' else False
-    transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
+    if training == 'dae':
+        return_orig = True
+        transform_key = 'local_transforms'
+
+    elif training == 'unet':
+        return_orig = False
+        transform_key = 'all_transforms'
+    # return_orig = True if training == 'dae' else False
+    # transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
     
     data_path = cfg.fs.root + cfg.data.brain.data_path
     model_cfg = cfg.unet.brain
@@ -1138,9 +1155,19 @@ def get_heart_train_loader(
         valid_gen (MultiThreadedAugmenter): Validation data generator.
     """
     
-    return_orig = True if training == 'dae' else False
-    train_transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
-    val_transform_key = 'local_val_transforms' if training == 'dae' else 'io_transforms'
+    # return_orig = True if training == 'dae' else False
+    # train_transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
+    if training == 'dae':
+        return_orig = True
+        transform_key = 'local_transforms'
+        val_transform_key = 'local_val_transforms'
+
+    elif training == 'unet':
+        return_orig = False
+        transform_key = 'all_transforms'
+        val_transform_key = 'io_transforms'
+    
+    # val_transform_key = 'local_val_transforms' if training == 'dae' else 'io_transforms'
 
     model_cfg = cfg.unet.heart
     
