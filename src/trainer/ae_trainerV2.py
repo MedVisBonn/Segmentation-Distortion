@@ -123,12 +123,18 @@ class AETrainerCalgaryV2:
                 unet_out, samples = self.inference_step(input_)
                 
                 if self.target == 'output':
-                    loss, metrics = self.criterion(unet_out, samples, 
-                                                  self.model.training_data)
+                    loss, metrics = self.criterion(
+                        unet_out, 
+                        samples, 
+                        self.model.training_data
+                    )
                 elif self.target == 'gt':
                     target = batch['target']
-                    loss, metrics = self.criterion(target.to(self.device), samples, 
-                                                   self.model.training_data)
+                    loss, metrics = self.criterion(
+                        target.to(self.device),
+                        samples, 
+                        self.model.training_data
+                    )
 
             self.optimizer.zero_grad()
             self.scaler.scale(loss).backward()
@@ -234,7 +240,7 @@ class AETrainerCalgaryV2:
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.weight_dir}{self.description}.npy'
+        savepath = f'{self.log_dir}{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
         return
@@ -689,7 +695,7 @@ def get_dae_brain_trainer(
 
     description=f'{cfg.run.data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}'
-    description=description.replace('__', '')
+    description=description.replace('__', '_')
     trainer = AETrainerCalgaryV2(
         model=model, 
         criterion=criterion,
@@ -729,7 +735,7 @@ def get_dae_heart_trainer(
     }
     description=f'{cfg.run.data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}'
-    description=description.replace('__', '')
+    description=description.replace('__', '_')
     trainer = AETrainerACDCV2(
         model=model, 
         criterion=criterion, 
