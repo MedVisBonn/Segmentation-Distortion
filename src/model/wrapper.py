@@ -200,6 +200,102 @@ class ModelAdapter(nn.Module):
 
     def forward(self, x: Tensor):
         return self.seg_model(x)
+    
+
+
+class PoolingMahalanobisWrapper(nn.Module):
+    def __init__(
+        self,
+        model: nn.Module,
+        adapters: nn.ModuleList,
+        copy: bool = True,
+    ):
+        super().__init__()
+        self.model           = deepcopy(model) if copy else model
+        self.adapters        = adapters
+        self.adapter_handles = {}
+
+
+    def hook_adapters(
+        self,
+    ) -> None:
+        for adapter in self.adapters:
+            swivel = adapter.swivel
+            layer  = self.model.get_submodule(swivel)
+            hook   = self._get_hook(adapter)
+            self.adapter_handles[
+                swivel
+            ] = layer.register_forward_pre_hook(hook)
+
+
+    def _get_hook(
+        self,
+        adapter: nn.Module
+    ) -> Callable:
+        def hook_fn(
+            module: nn.Module, 
+            x: Tuple[Tensor]
+        ) -> Tensor:
+            # x, *_ = x # tuple, alternatively use x_in = x[0]
+            # x = adapter(x)
+            return adapter(x[0])
+        
+        return hook_fn
+
+    def forward(
+        self, 
+        x: Tensor
+    ) -> Tensor:
+        return self.model(x)
+    
+
+class BatchNormMahalanobisWrapper(nn.Module):
+    def __init__(
+        self,
+        model: nn.Module,
+        adapters: nn.ModuleList,
+        copy: bool = True,
+    ):
+        super().__init__()
+        self.model           = deepcopy(model) if copy else model
+        self.adapters        = adapters
+        self.adapter_handles = {}
+
+
+    def hook_adapters(
+        self,
+    ) -> None:
+        for adapter in self.adapters:
+            swivel = adapter.swivel
+            layer  = self.model.get_submodule(swivel)
+            adapter.store_bn_params(layer)
+            hook = self._get_hook(adapter)
+            self.adapter_handles[
+                swivel
+            ] = layer.register_forward_pre_hook(hook)
+
+
+    def _get_hook(
+        self,
+        adapter: nn.Module
+    ) -> Callable:
+        def hook_fn(
+            module: nn.Module, 
+            x: Tuple[Tensor]
+        ) -> Tensor:
+            # x, *_ = x # tuple, alternatively use x_in = x[0]
+            # x = adapter(x)
+            # return x
+            return adapter(x[0]) 
+        
+        return hook_fn
+
+
+    def forward(
+        self, 
+        x: Tensor
+    ) -> Tensor:
+        return self.model(x)
 
 
 # class ModelAdapter(nn.Module):
