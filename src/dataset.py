@@ -59,6 +59,8 @@ class CalgaryCampinasDataset(Dataset):
         #         Vendor 5
         #         Length of dataset: 11520
 
+        assert site in [1,2,3,4,5,6], 'select a valid site'
+
         if site == 1:
             self.folder = "GE_15"
         elif site == 2:
@@ -330,6 +332,7 @@ class MNMDataset(Dataset):
         selection: str = 'all_cases', 
 #         adapt_size: str = 'crop'
     ):
+        assert vendor in ['A', 'B', 'C', 'D'], 'select suitable vendor'
         self.vendor = vendor
         self.debug = debug
         self.selection = selection
