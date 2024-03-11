@@ -1,4 +1,5 @@
 
+import torch
 from torch import Tensor, nn
 from torchmetrics import ROC
 from torchmetrics.utilities.compute import _auc_compute_without_check
@@ -16,12 +17,14 @@ class AUROC(nn.Module):
         # metrics
         self.roc_values = ROC(task='binary')
 
-
+    @torch.no_grad()
     def auroc(
         self,
         confids: Tensor,
         target: Tensor
     ):
+        
+        confids = (confids - confids.min()) / (confids.max() - confids.min())
         fpr, tpr, _ = self.roc_values(
             confids,
             target
@@ -38,7 +41,7 @@ class AUROC(nn.Module):
         else:
             return ret
 
-
+    @torch.no_grad()
     def forward(
         self,
         confids: Tensor,
