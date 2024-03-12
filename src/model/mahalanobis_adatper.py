@@ -92,7 +92,7 @@ class PoolingMahalanobisDetector(nn.Module):
             self._collect(x)
         
         else:
-            self.batch_distances = self._distance(x)
+            self.batch_distances = self._distance(x).detach().view(-1)
 
         # implements identity function from a hooks perspective
         if self.transform:
