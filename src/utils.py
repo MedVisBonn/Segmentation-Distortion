@@ -128,6 +128,8 @@ class UMapGenerator(nn.Module):
         
         if self.method == 'cross_entropy':
             umap = self.ce(x[:batch_size], self.m(x[batch_size:]))
+            if len(umap.shape) == 3:
+                umap = umap.unsqueeze(1)
             # umap = umap.mean(dim=1, keepdims=True)
             
         elif self.method == 'entropy':          

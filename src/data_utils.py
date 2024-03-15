@@ -835,7 +835,8 @@ def get_heart_eval_data(
     for vendor in test_sets:
         data[vendor] = MNMDataset(
             vendor=vendor,
-            debug=cfg.debug
+            debug=cfg.debug,
+            selection=cfg.data.heart.acdc.selection
         )
 
     assert len(data) > 0, "No data sets selected."
