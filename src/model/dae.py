@@ -70,7 +70,7 @@ def get_daes(
         weight_dir = cfg.dae.weight_dir
         data_key = cfg.run.data_key
         iteration = cfg.run.iteration
-        model_name = f'{data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
+        model_name = f'{data_key}_{cfg.dae.name}{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_{iteration}_best.pt'
         model_name = model_name.replace('__', '_')
         # model_name = f'{data_key}_{cfg.dae.name}_{iteration}_best.pt'

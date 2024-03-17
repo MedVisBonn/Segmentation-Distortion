@@ -8,7 +8,7 @@ from data_utils import get_eval_data
 from utils import load_state_dict_for_modulelists
 from model.unet import get_unet
 from model.dae import get_daes
-from eval.pixel_wise import get_precision_recall
+from eval.precision_recall import get_precision_recall
 
 
 

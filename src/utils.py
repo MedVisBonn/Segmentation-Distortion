@@ -121,11 +121,11 @@ class UMapGenerator(nn.Module):
             return None
         
         x = x.detach()
-        
+
         #################################
-        ### experimental / M&M only   ###
+        ### Cross and regular Entropy ###
         #################################
-        
+
         if self.method == 'cross_entropy':
             umap = self.ce(x[:batch_size], self.m(x[batch_size:]))
             if len(umap.shape) == 3:
@@ -134,8 +134,13 @@ class UMapGenerator(nn.Module):
             
         elif self.method == 'entropy':          
             x_prob = self.m(x[:batch_size])
-            umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy()
-
+            umap = torch.special.enntr(x_prob).sum(dim=1, keepdims=True)
+            # umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy()
+        
+        #################################
+        ### experimental / M&M only   ###
+        #################################
+    
         elif self.method == 'kl_divergence':
             x_in = F.log_softmax(x[:batch_size], dim=1)
             umap = self.kl(x_in, self.m(x[batch_size:]))
@@ -152,62 +157,62 @@ class UMapGenerator(nn.Module):
         ###   old umaps from MICCAI   ###
         #################################
         
-        if self.method == 'ae':
-            if self.net_out == 'mms':                
-                umap = self.ce(x[:1], self.m(x[1:]))
-                #umap = umap.mean(dim=(0, 1), keepdims=True)
-                #print(umap.shape)
-                umap = umap.mean(dim=0, keepdims=True)
-#                 x      = self.m(x)
-#                 x     -= x.min(dim=1, keepdims=True).values
-#                 x     /= x.sum(dim=1, keepdims=True)
-#                 umap   = torch.pow(x[:1] - x[1:], 2).mean(0, keepdim=True)
-#                 umap   = umap.mean(dim=1, keepdims=True)
+#         if self.method == 'ae':
+#             if self.net_out == 'mms':                
+#                 umap = self.ce(x[:1], self.m(x[1:]))
+#                 #umap = umap.mean(dim=(0, 1), keepdims=True)
+#                 #print(umap.shape)
+#                 umap = umap.mean(dim=0, keepdims=True)
+# #                 x      = self.m(x)
+# #                 x     -= x.min(dim=1, keepdims=True).values
+# #                 x     /= x.sum(dim=1, keepdims=True)
+# #                 umap   = torch.pow(x[:1] - x[1:], 2).mean(0, keepdim=True)
+# #                 umap   = umap.mean(dim=1, keepdims=True)
                 
-            elif self.net_out == 'calgary':
-                x    = torch.sigmoid(x)
-                umap = torch.pow(x[:1] - x[1:], 2).mean(0, keepdim=True)
-#                 umap = self.ce(x[:1] - self.m(x[1:]))
-#                 umap = 
+#             elif self.net_out == 'calgary':
+#                 x    = torch.sigmoid(x)
+#                 umap = torch.pow(x[:1] - x[1:], 2).mean(0, keepdim=True)
+# #                 umap = self.ce(x[:1] - self.m(x[1:]))
+# #                 umap = 
                 
                 
-        elif self.method == 'entropy':          
+#         elif self.method == 'entropy':          
 
-            if self.net_out == 'mms':
-                #print('x', x.shape)
-                #x_argmax  = torch.argmax(x, dim=1)
-                #print('2',x_argmax.shape)
-                #x_one_hot = F.one_hot(x_argmax, num_classes=4).permute(0,3,1,2).float()
-                #print('3',x_one_hot.shape)
-                x_softmax = F.softmax(x, dim=1)
-                #print('soft',x_softmax.shape)
-                #x_mean    = x_one_hot.mean(dim=0, keepdims=True)
-                x_mean    = x_softmax.mean(dim=0, keepdims=True)
-                #print('4',x_mean.shape)
-                umap = torch.distributions.Categorical(x_mean.permute(0,2,3,1)).entropy()
-                #print('5',umap.shape)
-                #umap      = - x_mean * torch.log(x_mean)
-                #umap      = umap.sum(dim=1, keepdims=True)
+#             if self.net_out == 'mms':
+#                 #print('x', x.shape)
+#                 #x_argmax  = torch.argmax(x, dim=1)
+#                 #print('2',x_argmax.shape)
+#                 #x_one_hot = F.one_hot(x_argmax, num_classes=4).permute(0,3,1,2).float()
+#                 #print('3',x_one_hot.shape)
+#                 x_softmax = F.softmax(x, dim=1)
+#                 #print('soft',x_softmax.shape)
+#                 #x_mean    = x_one_hot.mean(dim=0, keepdims=True)
+#                 x_mean    = x_softmax.mean(dim=0, keepdims=True)
+#                 #print('4',x_mean.shape)
+#                 umap = torch.distributions.Categorical(x_mean.permute(0,2,3,1)).entropy()
+#                 #print('5',umap.shape)
+#                 #umap      = - x_mean * torch.log(x_mean)
+#                 #umap      = umap.sum(dim=1, keepdims=True)
 
-            elif self.net_out == 'calgary':
-                x_probs = torch.sigmoid(x[1:])
-                x_mean  = x_probs.mean(dim=0, keepdims=True)
-                umap    = - x_mean * torch.log(x_mean) - (1-x_mean) * torch.log(1-x_mean)
+#             elif self.net_out == 'calgary':
+#                 x_probs = torch.sigmoid(x[1:])
+#                 x_mean  = x_probs.mean(dim=0, keepdims=True)
+#                 umap    = - x_mean * torch.log(x_mean) - (1-x_mean) * torch.log(1-x_mean)
                 
-        elif self.method == 'probs':
-            if self.net_out == 'mms':
-                x_probs = F.softmax(x, dim=1)
-                umap = torch.distributions.Categorical(x_probs.permute(0,2,3,1)).entropy()
-                #umap    = - x_probs * torch.log(x_probs)
-                #umap    = umap.sum(dim=1, keepdims=True)
+#         elif self.method == 'probs':
+#             if self.net_out == 'mms':
+#                 x_probs = F.softmax(x, dim=1)
+#                 umap = torch.distributions.Categorical(x_probs.permute(0,2,3,1)).entropy()
+#                 #umap    = - x_probs * torch.log(x_probs)
+#                 #umap    = umap.sum(dim=1, keepdims=True)
                 
-            elif self.net_out == 'calgary':
-                x_probs = torch.sigmoid(x)
-                #print(x_probs.min(), x_probs.max())
-                #umap = torch.distributions.Categorical(x_probs.permute(0,2,3,1)).entropy()
-                umap    = - x_probs * torch.log(x_probs+1e-6) - (1-x_probs) * torch.log(1-x_probs+1e-6)
+#             elif self.net_out == 'calgary':
+#                 x_probs = torch.sigmoid(x)
+#                 #print(x_probs.min(), x_probs.max())
+#                 #umap = torch.distributions.Categorical(x_probs.permute(0,2,3,1)).entropy()
+#                 umap    = - x_probs * torch.log(x_probs+1e-6) - (1-x_probs) * torch.log(1-x_probs+1e-6)
         
-        #print(umap.shape)
+        assert umap.shape[1] == 1, f"umap shape is {umap.shape}, but should be (n, 1, h, w)"
         return umap
     
     

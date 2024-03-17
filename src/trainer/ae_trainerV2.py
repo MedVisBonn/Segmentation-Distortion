@@ -693,7 +693,7 @@ def get_dae_brain_trainer(
         'UNet Volumetric Dice': UnetDice(data='calgary')
     }
 
-    description=f'{cfg.run.data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
+    description=f'{cfg.run.data_key}_{cfg.dae.name}{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}'
     description=description.replace('__', '_')
     trainer = AETrainerCalgaryV2(
@@ -733,7 +733,7 @@ def get_dae_heart_trainer(
         'Sample Volumetric Dice': SampleDice(data='MNM'),
         'UNet Volumetric Dice': UnetDice(data='MNM')
     }
-    description=f'{cfg.run.data_key}_{cfg.dae.name}_{cfg.dae.postfix}_' + \
+    description=f'{cfg.run.data_key}_{cfg.dae.name}{cfg.dae.postfix}_' + \
             f'{cfg.unet[cfg.run.data_key].pre}_{cfg.run.iteration}'
     description=description.replace('__', '_')
     trainer = AETrainerACDCV2(

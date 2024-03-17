@@ -89,35 +89,35 @@ def main(
                 device='cuda:0'
             )
 
-        dfs.append(
-            pd.DataFrame(
-                {
-                    'auroc': auroc,
-                    'fpr': fpr,
-                    'tpr': tpr,
-                    'data_key': cfg.run.data_key,
-                    'run': cfg.run.iteration,
-                    'domain': key,
-                    'method': f'{cfg.dae.name}{cfg.dae.postfix}',
-                    'unet': cfg.unet[cfg.run.data_key].pre,
-                }
+            dfs.append(
+                pd.DataFrame(
+                    {
+                        'auroc': auroc,
+                        'fpr': fpr,
+                        'tpr': tpr,
+                        'data_key': cfg.run.data_key,
+                        'run': cfg.run.iteration,
+                        'domain': key,
+                        'method': f'{cfg.dae.name}{cfg.dae.postfix}',
+                        'unet': cfg.unet[cfg.run.data_key].pre,
+                    }
+                )
             )
-        )
 
-        df = pd.concat(dfs)
-        save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
-        save_name = f'auroc_{cfg.run.data_key}_' + \
-            f'{cfg.dae.name}_' + \
-            f'{cfg.dae.postfix}_' + \
-            f'{cfg.unet[cfg.run.data_key].pre}_' + \
-            f'{cfg.run.iteration}.csv'
-        
-        if cfg.debug:
-            save_name = 'debug_' + save_name
-        if(not os.path.exists(save_dir)):
-            os.makedirs(save_dir)
-        save_name = save_name.replace('__', '_')
-        df.to_csv(save_dir + save_name)
+            df = pd.concat(dfs)
+            save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
+            save_name = f'auroc_{cfg.run.data_key}_' + \
+                f'{cfg.dae.name}_' + \
+                f'{cfg.dae.postfix}_' + \
+                f'{cfg.unet[cfg.run.data_key].pre}_' + \
+                f'{cfg.run.iteration}.csv'
+            
+            if cfg.debug:
+                save_name = 'debug_' + save_name
+            if(not os.path.exists(save_dir)):
+                os.makedirs(save_dir)
+            save_name = save_name.replace('__', '_')
+            df.to_csv(save_dir + save_name)
 
 
 if __name__ == "__main__":

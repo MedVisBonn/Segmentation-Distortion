@@ -214,6 +214,7 @@ class PoolingMahalanobisWrapper(nn.Module):
         self.model           = deepcopy(model) if copy else model
         self.adapters        = adapters
         self.adapter_handles = {}
+        self.model.eval()
 
 
     def hook_adapters(
@@ -241,6 +242,12 @@ class PoolingMahalanobisWrapper(nn.Module):
             return adapter(x[0])
         
         return hook_fn
+    
+
+    def fit(self):
+        for adapter in self.adapters:
+            adapter.fit()
+
 
     def forward(
         self, 
@@ -260,6 +267,7 @@ class BatchNormMahalanobisWrapper(nn.Module):
         self.model           = deepcopy(model) if copy else model
         self.adapters        = adapters
         self.adapter_handles = {}
+        self.model.eval()
 
 
     def hook_adapters(

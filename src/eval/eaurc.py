@@ -152,7 +152,7 @@ class EAURC(nn.Module):
         idx_sorted = np.argsort(confids)
 
         coverage = n_samples
-        error_sum = sum(risks[idx_sorted])
+        error_sum = sum(risks)
 
         coverages.append(coverage / n_samples)
         selective_risks.append(error_sum / n_samples)
@@ -211,9 +211,16 @@ class EAURC(nn.Module):
         selective_risks = np.sort(risks).cumsum() / np.arange(1, n + 1)
         aurc_opt = selective_risks.sum() / n
         ret, risks, weights = self._aurc(confids=confids, risks=risks)
+        
         if self.ret_curves:
-            risks   = torch.flip(torch.tensor(risks)[1:], [0])
+            risks   = torch.flip(torch.tensor(risks[:-1]), [0])
             weights = torch.cumsum(torch.flip(torch.tensor(weights), [0]), 0)
+            selective_risks = np.interp(
+                np.linspace(0, 1, len(weights)),
+                np.linspace(0,1,len(selective_risks)),
+                selective_risks
+            )
+            # selective_risks = torch.nn.functional.interpolate(selective_risks, size=weights.shape)
             return ret - aurc_opt, ret, risks, weights, selective_risks
         else:
             return ret - aurc_opt, ret

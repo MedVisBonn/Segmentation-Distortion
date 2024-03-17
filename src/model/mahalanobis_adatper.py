@@ -1,6 +1,71 @@
+from typing import List
 import torch
+from torch.utils.data import DataLoader
 from torch import Tensor, nn
 from sklearn.covariance import LedoitWolf
+from model.wrapper import PoolingMahalanobisWrapper, BatchNormMahalanobisWrapper
+
+
+
+
+def get_pooling_mahalanobis_detector(
+    swivels:    List[str],
+    unet:       nn.Module = None,
+    ledoitWolf: bool = False,
+    fit:        str  = 'raw', # None, 'raw', 'augmented'
+    iid_data:   DataLoader = None,
+    device:     str  = 'cuda:0',
+): 
+    pooling_detector = [
+        PoolingMahalanobisDetector(
+            swivel=swivel,
+            device=device,
+            ledoitWolf=ledoitWolf
+        ) for swivel in swivels
+    ]
+    pooling_wrapper = PoolingMahalanobisWrapper(
+        model=unet,
+        adapters=nn.ModuleList(pooling_detector)
+    )
+    pooling_wrapper.hook_adapters()
+    pooling_wrapper.to(device)
+    if fit == 'raw':
+        for batch in iid_data:
+            x = batch['input'].to(device)
+            _ = pooling_wrapper(x)
+    elif fit == 'augmented':
+        for _ in range(250):
+            batch = next(iid_data)
+            x = batch['data'].to(device)
+            _ = pooling_wrapper(x)
+    if fit is not None:
+        pooling_wrapper.fit()
+        pooling_wrapper.eval()
+
+    return pooling_wrapper
+
+
+
+def get_batchnorm_mahalanobis_detector(
+    swivels: List[str],
+    unet:    nn.Module = None,
+    device:  str  = 'cuda:0'
+):
+    batchnorm_detector = [
+        BatchNormMahalanobisDetector(
+            swivel=swivel,
+            device=device,
+        ) for swivel in swivels
+    ]
+    batchnorm_wrapper = BatchNormMahalanobisWrapper(
+        model=unet,
+        adapters=nn.ModuleList(batchnorm_detector)
+    )
+    batchnorm_wrapper.hook_adapters()
+    batchnorm_wrapper.to(device)
+    batchnorm_wrapper.eval()
+    
+    return batchnorm_wrapper
 
 
 
@@ -24,6 +89,7 @@ class PoolingMahalanobisDetector(nn.Module):
         self.training_representations = []
         # methods
         self._pool = nn.AvgPool3d(kernel_size=(2,2,2), stride=(2,2,2))
+        self.to(device)
 
 
     ### private methods ###
@@ -42,7 +108,7 @@ class PoolingMahalanobisDetector(nn.Module):
     @torch.no_grad()
     def _collect(self, x: Tensor) -> None:
         # reduces dimensionality, moves to cpu and stores
-        x = self._reduce(x).cpu()
+        x = self._reduce(x.detach()).cpu()
         self.training_representations.append(x)
 
 
@@ -114,7 +180,7 @@ class BatchNormMahalanobisDetector(nn.Module):
         self.swivel = swivel
         self.transform = transform
         self.device = device
-
+        self.to(device)
 
     ### private methods ###
     
