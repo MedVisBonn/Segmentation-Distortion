@@ -836,7 +836,7 @@ def get_heart_eval_data(
         data[vendor] = MNMDataset(
             vendor=vendor,
             debug=cfg.debug,
-            selection=cfg.data.heart.acdc.selection
+            selection=cfg.data.heart.mnm.selection
         )
 
     assert len(data) > 0, "No data sets selected."
@@ -1188,8 +1188,8 @@ def get_heart_train_loader(
     train_gen = MultiThreadedAugmenter(
         data_loader = train_loader,
         transform = train_augmentor,
-        num_processes = 1,
-        num_cached_per_queue = 1,
+        num_processes = 4,
+        num_cached_per_queue = 2,
         seeds=None
     )
     # train_gen = SingleThreadedAugmenter(
