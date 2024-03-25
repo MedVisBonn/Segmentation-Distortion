@@ -1,0 +1,28 @@
+
+# Hyperparams
+model: 'ResMAE'
+name: 'None'
+identity_swivels: None
+arch:
+  depth: 20
+  residual: false
+  p: 0.9
+trainer:
+  batch_size: 32
+  difference: true
+  reconstruction: true
+  loss: huber
+  target: output
+  lr: 1e-4
+  patience: 8
+  n_epochs: 250
+  num_batches_per_epoch: 250
+  num_val_batches_per_epoch: 50
+  disabled_ids: None
+
+# weights
+weight_dir: '../../pre-trained-tmp/trained_AEs/'
+log_dir: '../../pre-trained-tmp/trainer_logs/'
+
+# outputs
+plot_dir: ../experiments/unet/calgary/logs/

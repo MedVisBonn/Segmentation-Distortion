@@ -52,6 +52,8 @@ def get_daes(
         daes = get_compressionDAE(arch, swivels, disabled_ids)
     elif model == 'ResDAE':
         daes = get_resDAE(arch, swivels, disabled_ids)
+    elif model == 'ResMAE':
+        daes = get_resMAE(arch, swivels, disabled_ids)
     else:
         raise NotImplementedError(f'Model {model} not implemented.')
     
@@ -160,6 +162,25 @@ def get_resDAE(
 
 
 
+def get_resMAE(
+    arch: OmegaConf,
+    swivels: OmegaConf,
+    disabled_ids: List[str]
+) -> nn.ModuleList:
+    maes = nn.ModuleList([
+        ResMAE(
+            in_channels = swivels[layer].channel, 
+            depth       = arch.depth,
+            residual    = arch.residual,
+            p           = arch.p,
+            swivel      = layer
+        ) for layer in swivels if layer not in disabled_ids
+    ])
+
+    return maes
+
+
+
 class IdentityHook(nn.Module):
     def __init__(self, swivel: str):
         super().__init__()
@@ -167,6 +188,79 @@ class IdentityHook(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return x
+
+
+
+class ResMAE(nn.Module):
+    """
+    Residual Denoising Autoencoder (ResDAE) model.
+
+    Args:
+        in_channels (int): Number of input channels.
+        depth (int): Number of residual units in the model.
+        residual (bool, optional): Whether to use residual connections. Defaults to True.
+    """
+
+    def __init__(
+        self, 
+        in_channels, 
+        depth,
+        p,
+        swivel,
+        residual=True
+    ):
+        super(ResMAE, self).__init__()
+        self.on = True
+        self.swivel = swivel
+        self.residual = residual
+
+        self.model = nn.ModuleList(
+            ResidualUnit(
+                spatial_dims=2,
+                in_channels=in_channels,
+                out_channels=in_channels,
+                act="PReLU",
+                norm=("instance", {"affine": True}), # "BATCH",
+                adn_ordering="AN"
+            ) for _ in range(depth)
+        )
+        self.masking = nn.Dropout2d(p=p)
+
+
+
+    def turn_off(self) -> None:
+        """
+        Turn off the ResDAE model.
+        """
+        self.on = False
+
+    def turn_on(self) -> None:
+        """
+        Turn on the ResDAE model.
+        """
+        self.on = True
+
+    def forward(self, x):
+        """
+        Forward pass of the ResDAE model.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Tensor: Output tensor after passing through the ResDAE model.
+        """
+        if self.on:
+            x_out = self.masking(x)
+            for layer in self.model:
+                x_out = layer(x_out)
+            if self.residual:
+                return x + x_out
+            else:
+                return x_out
+        else:
+            return x
+        
 
 
 class ChannelDAE(nn.Module):
@@ -363,8 +457,9 @@ class ResDAE(nn.Module):
             Tensor: Output tensor after passing through the ResDAE model.
         """
         if self.on:
+            x_out = x.clone()
             for layer in self.model:
-                x_out = layer(x)
+                x_out = layer(x_out)
             if self.residual:
                 return x + x_out
             else:
