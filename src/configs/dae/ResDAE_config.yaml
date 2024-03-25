@@ -9,8 +9,8 @@ arch:
 trainer:
   batch_size: 32
   # augment: False
-  difference: True
-  reconstruction: True
+  difference: true
+  reconstruction: true
   loss: huber
   target: output
   lr: 1e-4

@@ -8,25 +8,29 @@ DEBUG=$3
 
 ## Globals
 LOG=true
-AUROC=true
-EAURC=true
-PR=false
+AUROC=false
+EAURC=false
+PR=true
 TESTING='all'
+# TESTING='['A']'
 
-## Model params
+## Model params 
 DAE_RESIDUAL=true
-DAE_POSTFIX='_residual'
+DAE_POSTFIX=''
+# DAE_POSTFIX='_reconstruction'
+# DAE_POSTFIX='_denoise-only'
+# DAE_POSTFIX='_masked7-128'
 # DAE_POSTFIX='_instance-reconstruction'
 # DAE_RESIDUAL=false
 
 
 # for UNET_NAME in 'default-8' 'monai-8-4-4' 'monai-16-4-4' 'default-16' 'monai-32-4-4' 'monai-64-4-4'; do
 # for UNET_NAME in 'default-8' 'monai-16-4-4'; do
-for UNET_NAME in 'default-8' 'monai-16-4-4'; do
+for UNET_NAME in 'default-8'; do
     IFS=- read -r UNET_ARCH UNET_N_FILTERS_INIT UNET_DEPTH UNET_NUM_RES_UNITS <<< $UNET_NAME
 
     # for DAE_NAME in 'ResDAE-8' 'ResDAE-32' 'ResDAE-128' ; do 'CompressionDAE-bottleneck-3-4'  'ChannelDAE-bottleneck-3-4' 'ChannelDAE-all-3-1' 'ChannelDAE-all-3-1' 'ResDAE-bottleneck-32'
-    for DAE_NAME in 'CompressionDAE-bottleneck-3-4' ; do
+    for DAE_NAME in 'ChannelDAE-bottleneck-3-4' ; do
         # echo "UNET: $UNET_NAME, DAE: $DAE_NAME"
         IFS=- read -r DAE_ARCH PLACEMENT DAE_DEPTH DAE_BLOCK<<< $DAE_NAME
 

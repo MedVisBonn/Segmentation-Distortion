@@ -21,9 +21,9 @@ def get_auroc_output(
         model.hook_inference_transformations(model.transformations, n_samples=1)
         # Put model in evaluation state
         model.to(device)
-        model.eval()
         model.freeze_seg_model()
-
+    model.eval()
+    
     auroc = AUROC()
     umap_generator = UMapGenerator(
         method=umap,

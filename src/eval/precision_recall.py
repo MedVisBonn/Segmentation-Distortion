@@ -30,9 +30,9 @@ def get_precision_recall(
         model.hook_inference_transformations(model.transformations, n_samples=1)
         # Put model in evaluation state
         model.to(device[0])
-        model.eval()
         model.freeze_seg_model()
-
+    model.eval()
+    
     batch_size = 32
 
     dataloader = DataLoader(

@@ -82,7 +82,6 @@ def main(
             umap='cross_entropy',
             device='cuda:0'
         )
-
         dfs.append(
             pd.DataFrame(
                 {

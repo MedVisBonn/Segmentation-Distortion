@@ -101,7 +101,7 @@ def main(
                     'data_key': cfg.run.data_key,
                     'run': cfg.run.iteration,
                     'domain': key,
-                    'method': f'{cfg.dae.name}_{cfg.dae.postfix}',
+                    'method': f'{cfg.dae.name}{cfg.dae.postfix}',
                     'unet': cfg.unet[cfg.run.data_key].pre,
                 }
             )

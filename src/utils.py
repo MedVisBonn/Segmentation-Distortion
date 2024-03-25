@@ -134,8 +134,8 @@ class UMapGenerator(nn.Module):
             
         elif self.method == 'entropy':          
             x_prob = self.m(x[:batch_size])
-            umap = torch.special.enntr(x_prob).sum(dim=1, keepdims=True)
-            # umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy()
+            umap = torch.special.entr(x_prob).sum(dim=1, keepdims=True)
+            # umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy().unsqueeze(1)
         
         #################################
         ### experimental / M&M only   ###
@@ -150,9 +150,9 @@ class UMapGenerator(nn.Module):
             x      = self.m(x)
             x     -= x.min(dim=1, keepdims=True).values
             x     /= x.sum(dim=1, keepdims=True)
-            umap   = torch.pow(x[:batch_size] - x[batch_size:], 2).mean(0, keepdim=True)
-            umap   = umap.mean(dim=1, keepdims=True)            
-            
+            umap   = torch.pow(x[:batch_size] - x[batch_size:], 2).mean(1, keepdim=True)
+            # umap   = umap.mean(dim=1, keepdims=True)            
+            # print(umap.shape)
         #################################
         ###   old umaps from MICCAI   ###
         #################################

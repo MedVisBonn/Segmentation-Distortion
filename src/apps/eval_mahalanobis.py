@@ -30,7 +30,7 @@ def main(
     assert cfg.eval is not None, "No eval specified. Add +eval_key=foo to program call."
 
     # GLOBALS (temporary)
-    # AUROC = False
+    AUROC = True
 
 
     # get segmentation model
@@ -94,7 +94,7 @@ def main(
     else:
         val_key = 'val'
     for data_key in data:
-        if key != val_key and key != 'train':
+        if key != val_key and key != 'train' and AUROC:
             ret = get_auroc_mahalanobis(
                 wrapper=pooling_mahalanobis_detector,
                 iid_data=data[val_key],

@@ -13,6 +13,7 @@ data:
     heart:
         acdc:
             data_path: 'nnUNet/data/nnUNet_preprocessed/Task500_ACDC/'
+            selection: 'non_empty_target'
         mnm:
             data_path: 'nnUNet/data/nnUNet_preprocessed/Task679_MNM/'
 unet:

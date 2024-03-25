@@ -3,7 +3,7 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
-from torchmetrics import Dice
+from torchmetrics.functional.classification import dice
 from utils import UMapGenerator
 
 
@@ -22,22 +22,15 @@ def get_eaurc_output(
         model.hook_inference_transformations(model.transformations, n_samples=1)
         # Put model in evaluation state
         model.to(device)
-        model.eval()
         model.freeze_seg_model()
+    model.eval()
 
+    
     umap_generator = UMapGenerator(
         method=umap,
         net_out=net_out,
     ).to(device)    
     eaurc = EAURC()
-    dice = Dice(
-        num_classes=2 if net_out == 'brain' else 4,
-        average='micro', #'macro' if net_out == 'brain' else 'micro', #'macro' if net_out == 'brain' else 
-        mdmc_average= 'samplewise', #None if net_out == 'brain' else
-        # multiclass=False if net_out == 'brain' else True,
-        # ignore_index=0 if net_out == 'heart' else None,
-        zero_division=1
-    ).to(device)
 
     batch_size = 32
 
@@ -58,14 +51,20 @@ def get_eaurc_output(
         # collect risk and score
         scores = umap_generator(output, batch_size=input_.shape[0]).cpu()
         risk.append(
-            torch.tensor([1 - dice(s, t) for s,t in zip(segmap, target)]).cpu()
+            torch.tensor([1 - dice(
+                    s.flatten(), 
+                    t.flatten(),
+                    num_classes=2 if net_out == 'brain' else 4,
+                    zero_division=1,
+                    average='micro'
+                ) for s,t in zip(segmap,target)]
+            ).cpu()
         )
         score.append(scores.mean(dim=(1,2,3)))
     # aggregate results
     risk = torch.cat(risk)
     score = torch.cat(score)
 
-    
     # compute eaurc and return
     return eaurc(score=score, risks=risk)
 
@@ -79,14 +78,6 @@ def get_eaurc_mahalanobis(
     device: str = 'cuda:0',
 ):
     eaurc = EAURC()
-    dice = Dice(
-        num_classes=2 if net_out == 'brain' else 4,
-        average='micro', #'macro' if net_out == 'brain' else 'micro',
-        mdmc_average= 'samplewise', #None if net_out == 'brain' else
-        # multiclass=False if net_out == 'brain' else True,
-        # ignore_index=0 if net_out == 'heart' else None,
-        zero_division=1
-    ).to(device)
     batch_size = 32
 
     loader = DataLoader(data, batch_size=batch_size, shuffle=False)
@@ -96,6 +87,8 @@ def get_eaurc_mahalanobis(
         # grab data
         input_ = batch['input'].to(device)
         target = batch['target'].to(device).long()
+        n_empty = (target>0).sum((1,2,3))==0
+        n = input_.shape[0]
         target[target == -1] = 0
         # inference
         output = wrapper(input_)
@@ -104,9 +97,16 @@ def get_eaurc_mahalanobis(
         elif net_out == 'heart':
             segmap = torch.argmax(output, dim=1, keepdims=True)
         # collect risk and score
-        # print(segmap.device, target.device)
+        # print(segmap.shape, torch.unique(segmap), target.shape, target.unique())
         risk.append(
-            torch.tensor([1 - dice(s, t) for s,t in zip(segmap, target)]).cpu()
+            torch.tensor([1 - dice(
+                    s.flatten(), 
+                    t.flatten(),
+                    num_classes=2 if net_out == 'brain' else 4,
+                    zero_division=1,
+                    average='micro'
+                ) for s,t in zip(segmap,target)]
+            ).cpu()
         )
         score.append({
             adapter.swivel: adapter.batch_distances.cpu().view(-1)
@@ -114,6 +114,7 @@ def get_eaurc_mahalanobis(
         })
     # aggregate results
     risk = torch.cat(risk)
+    print(f'Avrg DSC: {risk.mean():.4f}, Shape: {risk.shape}')
     score = {
         swivel: torch.cat([conf[swivel] for conf in score])
         for swivel in score[0].keys()
