@@ -136,6 +136,13 @@ class UMapGenerator(nn.Module):
             x_prob = self.m(x[:batch_size])
             umap = torch.special.entr(x_prob).sum(dim=1, keepdims=True)
             # umap = torch.distributions.Categorical(x_prob.permute(0,2,3,1)).entropy().unsqueeze(1)
+
+        elif self.method == 'top2diff':
+            x_prob = self.m(x[:batch_size])
+            assert len(x_prob.shape) == 4, f"x_prob shape is {x_prob.shape}, but should be (n, c, h, w)"
+            x_prob_sorted, _ = x_prob.sort(1)
+            umap = 1 - (x_prob_sorted[:, -1:] - x_prob_sorted[:, -2:-1])
+            assert len(umap.shape) == 4, f"umap shape is {umap.shape}, but should be (n, 1, h, w)"
         
         #################################
         ### experimental / M&M only   ###
