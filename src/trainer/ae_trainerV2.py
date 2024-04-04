@@ -43,6 +43,7 @@ class AETrainerCalgaryV2:
         # root: str,
         weight_dir: str,
         log_dir: str,
+        include_orig_data: bool = False,
         target: str = 'output', #gt
         lr: float = 5e-4,
         n_epochs: int = 1000, 
@@ -61,6 +62,7 @@ class AETrainerCalgaryV2:
         self.num_batches_per_epoch = num_batches_per_epoch
         self.num_val_batches_per_epoch = num_val_batches_per_epoch
         # self.root         = root
+        self.include_orig_data = include_orig_data
         self.weight_dir   = weight_dir
         self.log_dir      = log_dir
         self.description  = description
@@ -117,7 +119,10 @@ class AETrainerCalgaryV2:
 #             batch = next(self.train_loader)
 #             input_ = batch['data']
             batch = self.train_loader.next()
-            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            if self.include_orig_data:
+                input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            else:
+                input_ = batch['data']
             
             with autocast():
                 unet_out, samples = self.inference_step(input_)
@@ -168,7 +173,10 @@ class AETrainerCalgaryV2:
             
         for it in range(self.num_val_batches_per_epoch):
             batch = self.valid_loader.next()
-            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            if self.include_orig_data:
+                input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            else:
+                input_ = batch['data']
             
             target = batch['target'].to(self.device)
             unet_out, samples = self.inference_step(input_)
@@ -340,10 +348,11 @@ class AETrainerACDCV2:
         # root: str,
         weight_dir: str,
         log_dir: str,
+        include_orig_data: bool = False,
         target: str = 'output', #gt
         lr: float = 5e-4,
         n_epochs: int = 1000, 
-        patience: int = 5, 
+        patience: int = 5,
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None, 
         log: bool = True,
@@ -358,6 +367,7 @@ class AETrainerACDCV2:
         self.valid_loader = valid_loader
         self.num_batches_per_epoch = num_batches_per_epoch
         self.num_val_batches_per_epoch = num_val_batches_per_epoch
+        self.include_orig_data = include_orig_data
         self.weight_dir   = weight_dir
         self.log_dir      = log_dir
         self.description  = description
@@ -398,9 +408,12 @@ class AETrainerACDCV2:
 
     def inference_step(self, x):
         x = x.to(self.device)
-        batch_size = x.shape[0] // 2
-#         with torch.no_grad():
+        batch_size = x.shape[0]
+        if self.include_orig_data:
+            batch_size = batch_size // 2
+            #         with torch.no_grad():
 #             unet_out = self.unet(x).detach()
+        # print(batch_size, x.shape, self.model(x).shape)
         unet_out, samples = torch.split(self.model(x), batch_size)
         assert unet_out.shape == samples.shape, "Shapes dont match between unet out and denoised"
         return unet_out, samples
@@ -411,7 +424,10 @@ class AETrainerACDCV2:
         
         for it in range(self.num_batches_per_epoch):
             batch = self.train_loader.next()
-            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            if self.include_orig_data:
+                input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            else:
+                input_ = batch['data']
             input_ = self.crop(input_)
 
             with autocast():
@@ -465,7 +481,10 @@ class AETrainerACDCV2:
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for it in range(self.num_val_batches_per_epoch):
             batch = self.valid_loader.next()
-            input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            if self.include_orig_data:
+                input_ = torch.cat([batch['data_orig'], batch['data']], dim=0)
+            else:
+                input_ = batch['data']
             input_ = self.crop(input_)
             #print(input_.shape)
             #print(batch['target_orig'].shape, batch['target'].shape)
@@ -703,6 +722,7 @@ def get_dae_brain_trainer(
         valid_loader=val_loader,
         num_batches_per_epoch=trainer_config.num_batches_per_epoch,
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
+        include_orig_data=trainer_config.include_orig_data,
         weight_dir=cfg.dae.weight_dir,
         log_dir=cfg.dae.log_dir,
         target=trainer_config.target,
@@ -743,6 +763,7 @@ def get_dae_heart_trainer(
         valid_loader=val_loader,
         num_batches_per_epoch=trainer_config.num_batches_per_epoch,
         num_val_batches_per_epoch=trainer_config.num_val_batches_per_epoch,
+        include_orig_data=trainer_config.include_orig_data,
         weight_dir=cfg.dae.weight_dir,
         log_dir=cfg.dae.log_dir,        
         target=trainer_config.target,

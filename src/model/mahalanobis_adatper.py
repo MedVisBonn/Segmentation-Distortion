@@ -51,6 +51,8 @@ def get_batchnorm_mahalanobis_detector(
     unet:    nn.Module = None,
     reduce: bool = True,
     aggregate: str = 'mean',
+    transform: bool = False,
+    lr: float = 1e-3,
     device:  str  = 'cuda:0'
 ):
     batchnorm_detector = [
@@ -58,6 +60,8 @@ def get_batchnorm_mahalanobis_detector(
             swivel=swivel,
             reduce=reduce,
             aggregate=aggregate,
+            transform=transform,
+            lr=lr,
             device=device,
         ) for swivel in swivels
     ]
@@ -175,8 +179,6 @@ class PoolingMahalanobisDetector(nn.Module):
             raise NotImplementedError('Implement transformation functionality')
         else:
             return x
-        
-
 
 
 class BatchNormMahalanobisDetector(nn.Module):
@@ -261,64 +263,3 @@ class BatchNormMahalanobisDetector(nn.Module):
             x.requires_grad = False
 
         return x
-        
-
-
-class BatchNormMahalanobisWrapper(nn.Module):
-    def __init__(
-        self,
-        model: nn.Module,
-        adapters: nn.ModuleList,
-        copy: bool = True,
-    ):
-        super().__init__()
-        self.model           = deepcopy(model) if copy else model
-        self.adapters        = adapters
-        self.adapter_handles = {}
-        self.model.eval()
-
-
-    def hook_adapters(
-        self,
-    ) -> None:
-        for adapter in self.adapters:
-            swivel = adapter.swivel
-            layer  = self.model.get_submodule(swivel)
-            adapter.store_bn_params(layer)
-            hook = self._get_hook(adapter)
-            self.adapter_handles[
-                swivel
-            ] = layer.register_forward_pre_hook(hook)
-
-
-    def _get_hook(
-        self,
-        adapter: nn.Module
-    ) -> Callable:
-        def hook_fn(
-            module: nn.Module, 
-            x: Tuple[Tensor]
-        ) -> Tensor:
-            # x, *_ = x # tuple, alternatively use x_in = x[0]
-            # x = adapter(x)
-            # return x
-            return adapter(x[0]) 
-        
-        return hook_fn
-
-
-    def aggregate_adapter_scores(self):
-        scores_raw = torch.cat(
-            [adapter.batch_distances for adapter in self.adapters],
-            dim=1
-        )
-        scores_aggregated = scores_raw.sum(1).sqrt()
-
-        return scores_aggregated
-
-
-    def forward(
-        self, 
-        x: Tensor
-    ) -> Tensor:
-        return self.model(x)

@@ -13,6 +13,7 @@ from model.mahalanobis_adatper import (
 )
 from eval.auroc import get_auroc_mahalanobis
 from eval.eaurc import get_eaurc_mahalanobis
+from eval.precision_recall import get_precision_recall_mahalanobis
 
 
 @hydra.main(
@@ -30,8 +31,9 @@ def main(
     assert cfg.eval is not None, "No eval specified. Add +eval_key=foo to program call."
 
     # GLOBALS (temporary)
-    AUROC = True
-
+    AUROC = False
+    EAURC = False
+    PR = True
 
     # get segmentation model
     unet, state_dict = get_unet(
@@ -84,7 +86,6 @@ def main(
         )
     elif cfg.run.detector == 'batchnorm':
         if cfg.run.swivels == 'all':
-
             swivels = [layer[0] for layer in unet.named_modules() if 'bn' in layer[0]]
         elif cfg.run.swivels == 'default':
             swivels = ['up3.0.conv_path.0.bn'] if cfg.unet[cfg.run.data_key].arch == 'default' else None
@@ -94,7 +95,9 @@ def main(
             swivels=swivels,
             unet=unet,
             reduce=False,
-            aggregate='max',
+            aggregate='mean',
+            transform=True,
+            lr=cfg.eval.params.lr,
             device='cuda:0'
         )
     else:
@@ -102,6 +105,7 @@ def main(
 
     dfs_auroc = []
     dfs_eaurc = []
+    dfs_pr = []
     if cfg.run.data_key == 'brain' and cfg.eval.data.subset.apply:
         val_key = 'val_subset'
     else:
@@ -146,45 +150,87 @@ def main(
             save_name = save_name.replace('__', '_')
             df.to_csv(save_dir + save_name)
 
-        ret = get_eaurc_mahalanobis(
-            wrapper=mahalanobis_detector,
-            data=data[data_key],
-            net_out=cfg.run.data_key,
-            device='cuda:0'
-        )
-        # for key in ret:
-        eaurc, aurc, risks, weights, selective_risks = ret
-        dfs_eaurc.append(
-            pd.DataFrame(
-                {
-                    'eaurc': eaurc,
-                    'aurc': aurc,
-                    'risks': risks,
-                    'weights': weights,
-                    'selective_risks': selective_risks,
-                    'data_key': cfg.run.data_key,
-                    'run': cfg.run.iteration,
-                    'domain': data_key,
-                    'method': f'Mahalanobis_{cfg.run.detector}_{cfg.eval.logging.postfix}',
-                    'unet': cfg.unet[cfg.run.data_key].pre,
-                }
+        if EAURC:
+            ret = get_eaurc_mahalanobis(
+                wrapper=mahalanobis_detector,
+                data=data[data_key],
+                net_out=cfg.run.data_key,
+                device='cuda:0'
             )
-        )
-        df = pd.concat(dfs_eaurc)
-        save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
-        save_name = f'eaurc_{cfg.run.data_key}_' + \
-            f'mahalanobis_' + \
-            f'{cfg.run.detector}_' + \
-            f'{cfg.eval.logging.postfix}_' + \
-            f'{cfg.unet[cfg.run.data_key].pre}_' + \
-            f'{cfg.run.iteration}.csv'
-        
-        if cfg.debug:
-            save_name = 'debug_' + save_name
-        if(not os.path.exists(save_dir)):
-            os.makedirs(save_dir)
-        save_name = save_name.replace('__', '_')
-        df.to_csv(save_dir + save_name)
+            # for key in ret:
+            eaurc, aurc, risks, weights, selective_risks = ret
+            dfs_eaurc.append(
+                pd.DataFrame(
+                    {
+                        'eaurc': eaurc,
+                        'aurc': aurc,
+                        'risks': risks,
+                        'weights': weights,
+                        'selective_risks': selective_risks,
+                        'data_key': cfg.run.data_key,
+                        'run': cfg.run.iteration,
+                        'domain': data_key,
+                        'method': f'Mahalanobis_{cfg.run.detector}_{cfg.eval.logging.postfix}',
+                        'unet': cfg.unet[cfg.run.data_key].pre,
+                    }
+                )
+            )
+            df = pd.concat(dfs_eaurc)
+            save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
+            save_name = f'eaurc_{cfg.run.data_key}_' + \
+                f'mahalanobis_' + \
+                f'{cfg.run.detector}_' + \
+                f'{cfg.eval.logging.postfix}_' + \
+                f'{cfg.unet[cfg.run.data_key].pre}_' + \
+                f'{cfg.run.iteration}.csv'
+            
+            if cfg.debug:
+                save_name = 'debug_' + save_name
+            if(not os.path.exists(save_dir)):
+                os.makedirs(save_dir)
+            save_name = save_name.replace('__', '_')
+            df.to_csv(save_dir + save_name)
+
+        if PR:
+            ret = get_precision_recall_mahalanobis(
+                model=mahalanobis_detector,
+                dataset=data[data_key],
+                net_out=cfg.run.data_key,
+                umap='cross_entropy',
+                n_taus='auto',
+                device=['cuda:0', 'cuda:0']
+            )
+
+            p_sampled, r_sampled, pr_auc = ret
+            dfs_pr.append(
+                pd.DataFrame(
+                    {
+                        'pr_auc': pr_auc,
+                        'precision': p_sampled,
+                        'recall': r_sampled,
+                        'data_key': cfg.run.data_key,
+                        'run': cfg.run.iteration,
+                        'domain': data_key,
+                        'method': f'Mahalanobis_{cfg.run.detector}_{cfg.eval.logging.postfix}',
+                        'unet': cfg.unet[cfg.run.data_key].pre,
+                    }
+                )
+            )
+            df = pd.concat(dfs_pr)
+            save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
+            save_name = f'{cfg.run.data_key}_' + \
+                f'pr_mahalanobis_' + \
+                f'{cfg.run.detector}_' + \
+                f'{cfg.eval.logging.postfix}_' + \
+                f'{cfg.unet[cfg.run.data_key].pre}_' + \
+                f'{cfg.run.iteration}.csv'
+            
+            if cfg.debug:
+                save_name = 'debug_' + save_name
+            if(not os.path.exists(save_dir)):
+                os.makedirs(save_dir)
+            save_name = save_name.replace('__', '_')
+            df.to_csv(save_dir + save_name)
 
 
 if __name__ == "__main__":

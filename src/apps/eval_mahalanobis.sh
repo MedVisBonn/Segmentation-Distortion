@@ -9,8 +9,10 @@ DEBUG=$2
 TESTING='all'
 # TESTING='['A']'
 DETECTOR='batchnorm'
+LR=9000000
 SWIVELS='all'
-POSTFIX='all_max'
+POSTFIX='all_propagated_9e6'
+
 
 # for UNET_NAME in 'default-8' 'monai-8-4-4' 'monai-16-4-4' 'default-16' 'monai-32-4-4' 'monai-64-4-4'; do
 # for UNET_NAME in 'default-8' 'monai-16-4-4'; do
@@ -36,6 +38,7 @@ for UNET_NAME in 'default-8' ; do
             +eval=mahalanobis_config \
             ++eval.logging.postfix="$POSTFIX" \
             ++eval.params.sigma_algorithm='diagonal' \
+            ++eval.params.lr="$LR" \
             ++eval.data.testing="$TESTING"
     done
 done
