@@ -3,6 +3,7 @@
 model: 'ResDAE'
 name: 'None'
 identity_swivels: None
+training: 'dae'
 arch:
   depth: 20
   residual: false
@@ -18,6 +19,7 @@ trainer:
   n_epochs: 250
   num_batches_per_epoch: 250
   num_val_batches_per_epoch: 50
+  include_orig_data: true
   disabled_ids: None
 
 # weights

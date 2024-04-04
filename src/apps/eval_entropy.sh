@@ -7,6 +7,7 @@ DEBUG=$2
 
 ## Globals
 TESTING='all'
+TESTING=['A']
 
 # for UNET_NAME in 'default-8' 'monai-8-4-4' 'monai-16-4-4' 'default-16' 'monai-32-4-4' 'monai-64-4-4'; do
 # for UNET_NAME in 'default-8' 'monai-16-4-4'; do

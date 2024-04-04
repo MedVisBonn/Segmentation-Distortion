@@ -3,10 +3,11 @@
 model: 'ResMAE'
 name: 'None'
 identity_swivels: None
+training: 'mae'
 arch:
   depth: 20
-  residual: false
-  p: 0.9
+  p: 0.6
+  mask: 'per_channel'
 trainer:
   batch_size: 32
   difference: true
@@ -18,6 +19,7 @@ trainer:
   n_epochs: 250
   num_batches_per_epoch: 250
   num_val_batches_per_epoch: 50
+  include_orig_data: false
   disabled_ids: None
 
 # weights

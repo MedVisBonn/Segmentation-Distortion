@@ -28,8 +28,9 @@ def main(
     assert cfg.eval is not None, "No eval specified. Add +eval_key=foo to program call."
 
     # GLOBALS (temporary)
-    # AUROC = False
-
+    AUROC = False
+    EAURC = False
+    PR    = True
 
     # get segmentation model
     unet, state_dict = get_unet(
@@ -85,14 +86,14 @@ def main(
     for key in data:
         # TODO:
         # eval_auroc_entropy
-        if key != val_key:
+        if key != val_key and AUROC:
             auroc, fpr, tpr = get_auroc_output(
                 model=unet,
                 iid_data=data[val_key],
                 ood_data=data[key],
                 net_out=cfg.run.data_key,
                 dae=False,
-                umap='entropy',
+                umap='top2diff',
                 device='cuda:0'
             )
 
@@ -105,7 +106,7 @@ def main(
                         'data_key': cfg.run.data_key,
                         'run': cfg.run.iteration,
                         'domain': key,
-                        'method': f'entropy',
+                        'method': f'top2diff',
                         'unet': unet_name
                     }
                 )
@@ -114,7 +115,7 @@ def main(
             save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
             save_name = f'auroc_' + \
                 f'{cfg.run.data_key}_' + \
-                f'entropy_' + \
+                f'top2diff_' + \
                 f'{cfg.unet[cfg.run.data_key].pre}_' + \
                 f'{cfg.run.iteration}.csv'
             
@@ -126,86 +127,88 @@ def main(
             df.to_csv(save_dir + save_name)
 
         # eval_eaurc_entropy
-        eaurc, aurc, risks, weights, selective_risks = get_eaurc_output(
-            model=unet,
-            data=data[key],
-            net_out=cfg.run.data_key,
-            dae=False,
-            umap='entropy',
-            device='cuda:0'
-        )
-
-        dfs_eaurc.append(
-            pd.DataFrame(
-                {
-                    'eaurc': eaurc,
-                    'aurc': aurc,
-                    'risks': risks,
-                    'weights': weights,
-                    'selective_risks': selective_risks,
-                    'data_key': cfg.run.data_key,
-                    'run': cfg.run.iteration,
-                    'domain': key,
-                    'method': f'entropy',
-                    'unet': unet_name
-                }
+        if EAURC:
+            eaurc, aurc, risks, weights, selective_risks = get_eaurc_output(
+                model=unet,
+                data=data[key],
+                net_out=cfg.run.data_key,
+                dae=False,
+                umap='top2diff',
+                device='cuda:0'
             )
-        )
-        df = pd.concat(dfs_eaurc)
-        save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
-        save_name = f'eaurc_' + \
-            f'{cfg.run.data_key}_' + \
-            f'entropy_' + \
-            f'{cfg.unet[cfg.run.data_key].pre}_' + \
-            f'{cfg.run.iteration}.csv'
-        
-        if cfg.debug:
-            save_name = 'debug_' + save_name
-        if(not os.path.exists(save_dir)):
-            os.makedirs(save_dir)
-        save_name = save_name.replace('__', '_')
-        df.to_csv(save_dir + save_name)
 
-        # Precision Recall Curve
-        p_sampled, r_sampled, pr_auc = get_precision_recall(
-            model=unet,
-            dataset=data[key],
-            net_out=cfg.run.data_key,
-            dae=False,
-            umap='entropy',
-            n_taus='auto',
-            device=device,
-        )
-        
-        dfs_pr.append(
-            pd.DataFrame(
-                data={
-                    'precision': p_sampled,
-                    'recall': r_sampled,
-                    'pr_auc': pr_auc,
-                    'data_key': cfg.run.data_key,
-                    'run': cfg.run.iteration,
-                    'domain': key,
-                    'method': f'entropy',
-                    'unet': unet_name
-                }
+            dfs_eaurc.append(
+                pd.DataFrame(
+                    {
+                        'eaurc': eaurc,
+                        'aurc': aurc,
+                        'risks': risks,
+                        'weights': weights,
+                        'selective_risks': selective_risks,
+                        'data_key': cfg.run.data_key,
+                        'run': cfg.run.iteration,
+                        'domain': key,
+                        'method': f'top2diff',
+                        'unet': unet_name
+                    }
+                )
             )
-        )
+            df = pd.concat(dfs_eaurc)
+            save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
+            save_name = f'eaurc_' + \
+                f'{cfg.run.data_key}_' + \
+                f'top2diff_' + \
+                f'{cfg.unet[cfg.run.data_key].pre}_' + \
+                f'{cfg.run.iteration}.csv'
+            
+            if cfg.debug:
+                save_name = 'debug_' + save_name
+            if(not os.path.exists(save_dir)):
+                os.makedirs(save_dir)
+            save_name = save_name.replace('__', '_')
+            df.to_csv(save_dir + save_name)
 
-        df = pd.concat(dfs_pr)
-        save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
-        save_name = f'pr_' + \
-            f'{cfg.run.data_key}_' + \
-            f'entropy_' + \
-            f'{cfg.unet[cfg.run.data_key].pre}_' + \
-            f'{cfg.run.iteration}.csv'
-        
-        if cfg.debug:
-            save_name = 'debug_' + save_name
-        if(not os.path.exists(save_dir)):
-            os.makedirs(save_dir)
-        save_name = save_name.replace('__', '_')
-        df.to_csv(save_dir + save_name)
+        if PR:
+            # Precision Recall Curve
+            p_sampled, r_sampled, pr_auc = get_precision_recall(
+                model=unet,
+                dataset=data[key],
+                net_out=cfg.run.data_key,
+                dae=False,
+                umap='top2diff',
+                n_taus='auto',
+                device=device,
+            )
+            
+            dfs_pr.append(
+                pd.DataFrame(
+                    data={
+                        'precision': p_sampled,
+                        'recall': r_sampled,
+                        'pr_auc': pr_auc,
+                        'data_key': cfg.run.data_key,
+                        'run': cfg.run.iteration,
+                        'domain': key,
+                        'method': f'top2diff',
+                        'unet': unet_name
+                    }
+                )
+            )
+
+            df = pd.concat(dfs_pr)
+            save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
+            save_name = f'{cfg.run.data_key}_' + \
+                f'pr_' + \
+                f'top2diff_' + \
+                f'{cfg.unet[cfg.run.data_key].pre}_' + \
+                f'{cfg.run.iteration}.csv'
+            
+            if cfg.debug:
+                save_name = 'debug_' + save_name
+            if(not os.path.exists(save_dir)):
+                os.makedirs(save_dir)
+            save_name = save_name.replace('__', '_')
+            df.to_csv(save_dir + save_name)
 
 
 if __name__ == "__main__":
