@@ -11,7 +11,7 @@ from model.wrapper import PoolingMahalanobisWrapper, BatchNormMahalanobisWrapper
 def get_pooling_mahalanobis_detector(
     swivels:    List[str],
     unet:       nn.Module = None,
-    ledoitWolf: bool = False,
+    sigma_algorithm: str = 'default',
     fit:        str  = 'raw', # None, 'raw', 'augmented'
     iid_data:   DataLoader = None,
     device:     str  = 'cuda:0',
@@ -20,7 +20,7 @@ def get_pooling_mahalanobis_detector(
         PoolingMahalanobisDetector(
             swivel=swivel,
             device=device,
-            ledoitWolf=ledoitWolf
+            sigma_algorithm=sigma_algorithm
         ) for swivel in swivels
     ]
     pooling_wrapper = PoolingMahalanobisWrapper(
@@ -49,17 +49,21 @@ def get_pooling_mahalanobis_detector(
 def get_batchnorm_mahalanobis_detector(
     swivels: List[str],
     unet:    nn.Module = None,
+    reduce: bool = True,
+    aggregate: str = 'mean',
     device:  str  = 'cuda:0'
 ):
     batchnorm_detector = [
         BatchNormMahalanobisDetector(
             swivel=swivel,
+            reduce=reduce,
+            aggregate=aggregate,
             device=device,
         ) for swivel in swivels
     ]
     batchnorm_wrapper = BatchNormMahalanobisWrapper(
         model=unet,
-        adapters=nn.ModuleList(batchnorm_detector)
+        adapters=nn.ModuleList(batchnorm_detector),
     )
     batchnorm_wrapper.hook_adapters()
     batchnorm_wrapper.to(device)
@@ -73,22 +77,23 @@ class PoolingMahalanobisDetector(nn.Module):
     def __init__(
         self,
         swivel:     str,
-        ledoitWolf: bool = True,
+        sigma_algorithm: str = 'default',
         # hook_fn:    str  = 'pre',
         transform:  bool = False,
         device:     str  = 'cuda:0'
     ):
         super().__init__()
+        print(sigma_algorithm)
         # init args
         self.swivel = swivel
-        self.ledoitWolf = ledoitWolf
+        self.sigma_algorithm = sigma_algorithm
         # self.hook_fn = self.register_forward_pre_hook if hook_fn == 'pre' else self.register_forward_hook
         self.transform = transform
         self.device = device
         # other attributes
         self.training_representations = []
         # methods
-        self._pool = nn.AvgPool3d(kernel_size=(2,2,2), stride=(2,2,2))
+        self._pool = nn.AvgPool2d(kernel_size=(2,2), stride=(2,2))
         self.to(device)
 
 
@@ -97,7 +102,7 @@ class PoolingMahalanobisDetector(nn.Module):
     @torch.no_grad()
     def _reduce(self, x: Tensor) -> Tensor:
         # reduce dimensionality with 3D pooling to below 1e4 entries
-        while torch.prod(torch.tensor(x.shape[1:])) > 1e4:
+        while torch.prod(torch.tensor(x.shape[1:])) > 1e5:
             x = self._pool(x)
         x = self._pool(x)
         # reshape to (batch_size, 1, n_features)
@@ -124,14 +129,19 @@ class PoolingMahalanobisDetector(nn.Module):
     @torch.no_grad()
     def _estimate_gaussians(self) -> None:
         self.mu = self.training_representations.mean(0, keepdims=True).detach().to(self.device)
-        if self.ledoitWolf:
+        if self.sigma_algorithm == 'ledoitWolf':
             self.sigma = torch.from_numpy(
                 LedoitWolf().fit(
                     self.training_representations.squeeze(1)
                 ).covariance_
             )
-        else:
+        elif self.sigma_algorithm == 'diagonal':
+            self.sigma = self.sigma = torch.var(self.training_representations.squeeze(1), dim=0).diag(0)
+        elif self.sigma_algorithm == 'default':
             self.sigma = torch.cov(self.training_representations.squeeze(1).T)
+        else:
+            raise NotImplementedError('Choose from: lediotWolf, diagonal, default')
+
         self.sigma_inv = torch.linalg.inv(self.sigma).detach().unsqueeze(0).to(self.device)
 
 
@@ -168,16 +178,23 @@ class PoolingMahalanobisDetector(nn.Module):
         
 
 
+
 class BatchNormMahalanobisDetector(nn.Module):
     def __init__(
         self,
         swivel:    str,
+        reduce: bool = True,
+        aggregate: str = 'mean',
         transform: bool = False,
+        lr: float = 1e-3,
         device:    str  = 'cuda:0'
     ):
         super().__init__()
         # init args
         self.swivel = swivel
+        self.reduce = reduce
+        self.aggregate = aggregate
+        self.lr = lr
         self.transform = transform
         self.device = device
         self.to(device)
@@ -188,7 +205,13 @@ class BatchNormMahalanobisDetector(nn.Module):
         self, 
         x: Tensor
     ) -> Tensor:
-        x = x.mean(dim=(2,3)).unsqueeze(1)
+        if self.aggregate == 'mean':
+            x = x.mean(dim=(2,3)).unsqueeze(1)
+        elif self.aggregate == 'max':
+            x = (x - self.mu.view((1, -1, 1, 1)).abs())
+            x = x.amax(dim=(2,3)).unsqueeze(1)
+        else:
+            raise NotImplementedError(f'{self.aggregate} not implemented, choose from: [mean, max]')
 
         return x
 
@@ -199,9 +222,10 @@ class BatchNormMahalanobisDetector(nn.Module):
     ) -> Tensor:
         x = self._reduce(x)
         x = (x - self.mu)**2
-        dist = (x * self.sigma_inv).sum(dim=(1,2), keepdim=True)
-
-        return torch.sqrt(dist)
+        dist = (x * self.sigma_inv)
+        if self.reduce:
+            dist = torch.sqrt(dist.sum(dim=(1,2), keepdim=True))
+        return dist
 
 
     ### public methods ###
@@ -210,22 +234,91 @@ class BatchNormMahalanobisDetector(nn.Module):
         self,
         params
     ) -> None:
-        self.mu  = params.running_mean.detach().unsqueeze(0).to(self.device)
-        self.var = params.running_var.detach().unsqueeze(0).to(self.device)
-        self.sigma_inv = 1 / torch.sqrt(self.var) 
+        self.register_buffer('mu', params.running_mean.detach().unsqueeze(0).to(self.device))
+        self.register_buffer('var', params.running_var.detach().unsqueeze(0).to(self.device))
+        self.register_buffer('sigma_inv', 1 / torch.sqrt(self.var))
 
 
     def forward(
         self, 
         x: Tensor
     ) -> Tensor:
+        # implements identity function from a hooks perspective
         if self.training:
             pass
         else:
-            self.batch_distances = self._distance(x).detach().view(-1)
-
-        # implements identity function from a hooks perspective
+            if self.reduce:
+                self.batch_distances = self._distance(x).detach().cpu().view(-1)
+            else:
+                self.batch_distances = self._distance(x).detach().cpu().view(x.shape[0], -1)
+        
         if self.transform:
-            raise NotImplementedError('Implement transformation functionality')
-        else:
-            return x
+            x = x.clone().detach().requires_grad_(True)
+            dist = self._distance(x).mean()
+            dist.backward()
+            x.data.sub_(self.lr * x.grad.data)
+            x.grad.data.zero_()
+            x.requires_grad = False
+
+        return x
+        
+
+
+class BatchNormMahalanobisWrapper(nn.Module):
+    def __init__(
+        self,
+        model: nn.Module,
+        adapters: nn.ModuleList,
+        copy: bool = True,
+    ):
+        super().__init__()
+        self.model           = deepcopy(model) if copy else model
+        self.adapters        = adapters
+        self.adapter_handles = {}
+        self.model.eval()
+
+
+    def hook_adapters(
+        self,
+    ) -> None:
+        for adapter in self.adapters:
+            swivel = adapter.swivel
+            layer  = self.model.get_submodule(swivel)
+            adapter.store_bn_params(layer)
+            hook = self._get_hook(adapter)
+            self.adapter_handles[
+                swivel
+            ] = layer.register_forward_pre_hook(hook)
+
+
+    def _get_hook(
+        self,
+        adapter: nn.Module
+    ) -> Callable:
+        def hook_fn(
+            module: nn.Module, 
+            x: Tuple[Tensor]
+        ) -> Tensor:
+            # x, *_ = x # tuple, alternatively use x_in = x[0]
+            # x = adapter(x)
+            # return x
+            return adapter(x[0]) 
+        
+        return hook_fn
+
+
+    def aggregate_adapter_scores(self):
+        scores_raw = torch.cat(
+            [adapter.batch_distances for adapter in self.adapters],
+            dim=1
+        )
+        scores_aggregated = scores_raw.sum(1).sqrt()
+
+        return scores_aggregated
+
+
+    def forward(
+        self, 
+        x: Tensor
+    ) -> Tensor:
+        return self.model(x)

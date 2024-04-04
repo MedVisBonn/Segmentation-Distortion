@@ -1,0 +1,62 @@
+
+name: mahalanobis
+params:
+  sigma_algorithm: default
+data:
+  training: true
+  validation: true
+  testing: []
+  subset:
+    apply: false
+    params:
+      n_cases: 256
+      fraction: 0.1
+      return_original: false
+
+
+
+# brain:
+#   unet:
+#     train:
+#       volume_wise: True
+#       batch_size: 1
+#       collate: volume
+#     val:
+#       volume_wise: True
+#       batch_size: 1
+#       collate: volume
+#     test:
+#       volume_wise: True
+#       batch_size: 1
+#       collate: volume
+#   image:
+#     train:
+#       volume_wise: False
+#       batch_size: 32
+#       collate: default
+#     val:
+#       volume_wise: True
+#       batch_size: 1
+#       collate: volume
+#     test:
+#       volume_wise: True
+#       batch_size: 1
+#       collate: volume
+#   pixel:
+#     train:
+#       volume_wise: False
+#       batch_size: 32
+#       collate: default
+#     val:
+#       volume_wise: False
+#       batch_size: 32
+#       collate: default
+#     test:
+#       volume_wise: False
+#       batch_size: 32
+#       collate: default
+
+# heart:
+#   volume_wise: False
+#   batch_size: 1
+#   collate: default

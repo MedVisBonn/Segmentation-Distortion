@@ -108,22 +108,27 @@ def get_eaurc_mahalanobis(
                 ) for s,t in zip(segmap,target)]
             ).cpu()
         )
-        score.append({
-            adapter.swivel: adapter.batch_distances.cpu().view(-1)
-            for adapter in wrapper.adapters
-        })
+        score.append(
+            wrapper.aggregate_adapter_scores()
+        )
+        # score.append({
+        #     adapter.swivel: adapter.batch_distances.cpu().view(-1)
+        #     for adapter in wrapper.adapters
+        # })
     # aggregate results
     risk = torch.cat(risk)
-    print(f'Avrg DSC: {risk.mean():.4f}, Shape: {risk.shape}')
-    score = {
-        swivel: torch.cat([conf[swivel] for conf in score])
-        for swivel in score[0].keys()
-    }
+    score = torch.cat(score)
+    # print(f'Avrg DSC: {risk.mean():.4f}, Shape: {risk.shape}')
+    # score = {
+    #     swivel: torch.cat([conf[swivel] for conf in score])
+    #     for swivel in score[0].keys()
+    # }
     # compute eaurc
-    ret = {
-        swivel: eaurc(score=score[swivel], risks=risk)
-        for swivel in score.keys()
-    }
+    # ret = {
+    #     swivel: eaurc(score=score[swivel], risks=risk)
+    #     for swivel in score.keys()
+    # }
+    ret = eaurc(score=score, risks=risk)
 
     return ret
 

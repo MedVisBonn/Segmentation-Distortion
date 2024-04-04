@@ -5,6 +5,195 @@ from copy import deepcopy
 from model.unet import UNet2D
 
 
+class MaskedAutoencoderAdapter(nn.Module):
+    """Wrapper class for segmentation models and feature transformations.
+
+    Wraps (a copy of) the segmentation model and attaches feature
+    transformations to its swivels via hooks (at potentially various positions
+    simultaneously). Additionally, it provides control utilities for the
+    hooks as well as different types for inference training and inspection.
+    """
+
+    def __init__(
+        self,
+        seg_model: nn.Module,
+        transformations: nn.ModuleList,
+        disabled_ids: list = [],
+        copy: bool = True,
+    ):
+        super().__init__()
+        self.seg_model = deepcopy(seg_model) if copy else seg_model
+
+        self.transformations = transformations
+        self.disabled_ids = disabled_ids
+        self.transformation_handles = {}
+        self.train_transformation_handles = {}
+        self.inspect_transformation_handles = {}
+        self.training_data = {}
+        self.inspect_data = {}
+
+
+    def hook_train_transformations(
+        self, 
+        transformations: List[nn.Module]
+    ) -> None:
+        for transformation in transformations:
+            swivel = transformation.swivel
+            layer = self.seg_model.get_submodule(swivel)
+            hook = self._get_train_transformation_hook(
+                transformation, 
+                swivel
+            )
+            self.train_transformation_handles[
+                swivel
+            ] = layer.register_forward_pre_hook(hook)
+
+
+    def hook_inference_transformations(
+        self, 
+        transformations: List[nn.Module],
+        n_samples: int
+    ) -> None:
+        for transformation in transformations:
+            swivel = transformation.swivel
+            layer = self.seg_model.get_submodule(swivel)
+            hook = self._get_inference_transformation_hook(
+                transformation,
+                n_samples
+            )
+            self.transformation_handles[swivel] = layer.register_forward_pre_hook(
+                hook
+            )
+            
+
+    def hook_inspect_transformation(
+        self, 
+        transformations: List[nn.Module], 
+    ) -> None:
+        for transformation in transformations:
+            swivel = transformation.swivel
+            # if swivel not in self.disabled_ids:
+            layer = self.seg_model.get_submodule(swivel)
+            hook  = self._get_inspect_transformation_hook(
+                transformation, 
+                swivel
+            )
+            self.inspect_transformation_handles[
+                swivel
+            ] = layer.register_forward_pre_hook(hook)
+
+
+    def _get_train_transformation_hook(
+        self,
+        transformation: nn.Module,
+        layer_id: str
+    ) -> Callable:
+        def hook(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
+            x_in, *_ = x  # tuple, alternatively use x_in = x[0]
+            transformation_out, mask = transformation(x_in)
+            
+            if layer_id not in self.disabled_ids:
+                
+                # print(transformation_out.shape, mask)
+
+                masked_mse = nn.functional.mse_loss(
+                    transformation_out, 
+                    x_in.detach(),
+                    reduction="none"
+                ) * (1-mask)
+
+                training_data = {
+                    "mse": masked_mse.mean(),
+                }
+
+                self.training_data[layer_id] = training_data
+            # else:
+            #     print(transformation_out.shape)
+
+            return torch.cat([x_in, transformation_out], dim=0)
+            
+        return hook
+    
+
+    def _get_inference_transformation_hook(
+        self, transformation: nn.Module, n_samples: int = 1
+    ) -> Callable:
+        def hook(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
+            x_in, *_ = x  # weird tuple, can use x_in = x[0]
+            if n_samples == 0:
+                return x
+            elif n_samples == -1:
+                x_in_new, _ = transformation(x_in)
+                return x_in_new
+            else:
+                x_reconstructed = x_in.unsqueeze(1).repeat(1, n_samples, 1, 1, 1).flatten(0, 1)
+                x_reconstructed, _ = transformation(x_reconstructed)
+                return torch.cat([x_in, x_reconstructed], dim=0)
+
+        return hook
+    
+    
+    def _get_inspect_transformation_hook(
+        self,
+        transformation: nn.Module,
+        layer_id: str
+    ) -> Callable:
+        def hook(module: nn.Module, x: Tuple[Tensor]) -> Tensor:
+            x_in, *_ = x
+            transformation_out, mask = transformation(x_in)
+            if layer_id not in self.disabled_ids:
+                inspect_data = {
+                    'input'     : x_in.detach().cpu(),
+                    'output'    : transformation_out.detach().cpu()
+                }
+                self.inspect_data[layer_id] = inspect_data
+
+            return torch.cat([x_in, transformation_out], dim=0)
+
+
+        return hook
+    
+
+    def remove_train_transformation_hook(self, layer_id: str) -> None:
+        self.train_transformation_handles[layer_id].remove()
+
+    def remove_transformation_hook(self, layer_id: str) -> None:
+        self.transformation_handles[layer_id].remove()
+        
+    def remove_inspect_transformation_hook(self, layer_id: str) -> None:
+        self.inspect_transformation_handles[layer_id].remove()
+
+    def remove_all_hooks(self):
+        if hasattr(self, "train_transformation_handles"):
+            for handle in self.train_transformation_handles:
+                self.train_transformation_handles[handle].remove()
+            self.train_transformation_handles = {}
+
+        if hasattr(self, "transformation_handles"):
+            for handle in self.transformation_handles:
+                self.transformation_handles[handle].remove()
+            self.transformation_handles = {}
+            
+        if hasattr(self, 'inspect_transformation_handles'):
+            for handle in self.inspect_transformation_handles:
+                self.inspect_transformation_handles[handle].remove()
+            self.inspect_transformation_handles = {}
+        
+
+    def freeze_seg_model(self):
+        self.seg_model.eval()
+        for param in self.seg_model.parameters():
+            param.requires_grad = False
+
+
+    def set_number_of_samples_to(self, n_samples: int):
+        self.n_samples = n_samples
+
+
+    def forward(self, x: Tensor):
+        return self.seg_model(x)
+    
+
 
 
 class ModelAdapter(nn.Module):
@@ -75,7 +264,7 @@ class ModelAdapter(nn.Module):
             swivel = transformation.swivel
             if swivel not in self.disabled_ids:
                 layer = self.seg_model.get_submodule(swivel)
-                hook  = self._get_inspect_transformation_hook(transformations, swivel)
+                hook  = self._get_inspect_transformation_hook(transformation, swivel)
                 self.inspect_transformation_handles[
                     swivel
                 ] = layer.register_forward_pre_hook(hook)
@@ -297,6 +486,16 @@ class BatchNormMahalanobisWrapper(nn.Module):
             return adapter(x[0]) 
         
         return hook_fn
+
+
+    def aggregate_adapter_scores(self):
+        scores_raw = torch.cat(
+            [adapter.batch_distances for adapter in self.adapters],
+            dim=1
+        )
+        scores_aggregated = scores_raw.sum(1).sqrt()
+
+        return scores_aggregated
 
 
     def forward(

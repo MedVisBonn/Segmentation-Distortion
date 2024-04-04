@@ -73,10 +73,13 @@ def get_auroc_mahalanobis(
     for batch in iid_loader:
         input_ = batch['input'].to(device)
         _ = wrapper(input_)
-        score_iid.append({
-            adapter.swivel: adapter.batch_distances.cpu().view(-1)
-            for adapter in wrapper.adapters
-        })
+        # score_iid.append({
+        #     adapter.swivel: adapter.batch_distances.cpu().view(-1)
+        #     for adapter in wrapper.adapters
+        # })
+        score_iid.append(
+            wrapper.aggregate_adapter_scores()
+        )
     target_iid = torch.zeros(len(iid_data))
 
 
@@ -84,24 +87,28 @@ def get_auroc_mahalanobis(
     for batch in ood_loader:
         input_ = batch['input'].to(device)
         _ = wrapper(input_)
-        score_ood.append({
-            adapter.swivel: adapter.batch_distances.cpu().view(-1)
-            for adapter in wrapper.adapters
-        })
+        # score_ood.append({
+        #     adapter.swivel: adapter.batch_distances.cpu().view(-1)
+        #     for adapter in wrapper.adapters
+        # })
+        score_ood.append(
+            wrapper.aggregate_adapter_scores()
+        )
     target_ood = torch.ones(len(ood_data))
     
-    score = {
-        swivel: torch.cat([conf[swivel] for conf in score_iid + score_ood])
-        for swivel in score_iid[0].keys()
-    }
-    
+    # score = {
+    #     swivel: torch.cat([conf[swivel] for conf in score_iid + score_ood])
+    #     for swivel in score_iid[0].keys()
+    # }
+    score = torch.cat(score_iid + score_ood)
     target = torch.cat([target_iid, target_ood]).long()
 
 
-    ret = {
-        swivel: auroc(confids=score[swivel], target=target)
-        for swivel in score.keys()
-    }
+    # ret = {
+    #     swivel: auroc(confids=score[swivel], target=target)
+    #     for swivel in score.keys()
+    # }
+    ret = auroc(confids=score, target=target)
 
     return ret
 
