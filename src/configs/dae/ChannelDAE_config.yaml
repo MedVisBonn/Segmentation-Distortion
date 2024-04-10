@@ -46,6 +46,7 @@ trainer:
   n_epochs: 250
   num_batches_per_epoch: 250
   num_val_batches_per_epoch: 50
+  include_orig_data: true
   disabled_ids: [shortcut0, shortcut1, shortcut2]
 
 # weights

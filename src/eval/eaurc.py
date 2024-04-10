@@ -133,6 +133,88 @@ def get_eaurc_mahalanobis(
     return ret
 
 
+
+def get_eaurc_mahalanobis_propagated(
+    wrapper: nn.Module,
+    data: Dataset,
+    umap: str,
+    net_out: str,
+    device: str = 'cuda:0',
+):
+    eaurc = EAURC()
+    batch_size = 32
+
+    loader = DataLoader(data, batch_size=batch_size, shuffle=False)
+
+    umap_generator = UMapGenerator(
+        method=umap,
+        net_out=net_out,
+    ).to(device)
+    
+    score, risk = [], []
+    for batch in loader:
+        # grab data
+        input_ = batch['input'].to(device)
+        target = batch['target'].to(device).long()
+        n_empty = (target>0).sum((1,2,3))==0
+        n = input_.shape[0]
+        target[target == -1] = 0
+        # inference
+        wrapper.set_transform(False)
+        output_original = wrapper(input_)
+        wrapper.set_transform(True)
+        output_transformed = wrapper(input_)
+        # output = wrapper(input_)
+        if net_out == 'brain':
+            segmap = (torch.sigmoid(output_original) > 0.5) * 1
+        elif net_out == 'heart':
+            segmap = torch.argmax(output_original, dim=1, keepdims=True)
+        # collect risk and score
+        # print(segmap.shape, torch.unique(segmap), target.shape, target.unique())
+        risk.append(
+            torch.tensor([1 - dice(
+                    s.flatten(), 
+                    t.flatten(),
+                    num_classes=2 if net_out == 'brain' else 4,
+                    zero_division=1,
+                    average='micro'
+                ) for s,t in zip(segmap,target)]
+            ).cpu()
+        )
+        scores = umap_generator(
+            torch.cat(
+                [output_original, output_transformed],
+                dim=0
+            ), 
+            batch_size=input_.shape[0]
+        ).cpu()
+        score.append(scores.mean(dim=(1,2,3)))
+        # score.append(
+        #     wrapper.aggregate_adapter_scores()
+        # )
+        # score.append({
+        #     adapter.swivel: adapter.batch_distances.cpu().view(-1)
+        #     for adapter in wrapper.adapters
+        # })
+    # aggregate results
+    risk = torch.cat(risk)
+    score = torch.cat(score)
+    # print(f'Avrg DSC: {risk.mean():.4f}, Shape: {risk.shape}')
+    # score = {
+    #     swivel: torch.cat([conf[swivel] for conf in score])
+    #     for swivel in score[0].keys()
+    # }
+    # compute eaurc
+    # ret = {
+    #     swivel: eaurc(score=score[swivel], risks=risk)
+    #     for swivel in score.keys()
+    # }
+    ret = eaurc(score=score, risks=risk)
+
+    return ret
+
+
+
 class EAURC(nn.Module):
     def __init__(
         self,

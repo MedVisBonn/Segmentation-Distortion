@@ -12,8 +12,12 @@ from model.mahalanobis_adatper import (
     get_batchnorm_mahalanobis_detector
 )
 from eval.auroc import get_auroc_mahalanobis
-from eval.eaurc import get_eaurc_mahalanobis
+from eval.eaurc import (
+    get_eaurc_mahalanobis,
+    get_eaurc_mahalanobis_propagated
+)
 from eval.precision_recall import get_precision_recall_mahalanobis
+
 
 
 @hydra.main(
@@ -32,7 +36,7 @@ def main(
 
     # GLOBALS (temporary)
     AUROC = False
-    EAURC = False
+    EAURC = True
     PR = True
 
     # get segmentation model
@@ -82,6 +86,8 @@ def main(
             sigma_algorithm=cfg.eval.params.sigma_algorithm,
             fit='raw',
             iid_data=iid_data,
+            transform=True,
+            lr=cfg.eval.params.lr,
             device='cuda:0'
         )
     elif cfg.run.detector == 'batchnorm':
@@ -151,9 +157,16 @@ def main(
             df.to_csv(save_dir + save_name)
 
         if EAURC:
-            ret = get_eaurc_mahalanobis(
+            # ret = get_eaurc_mahalanobis(
+            #     wrapper=mahalanobis_detector,
+            #     data=data[data_key],
+            #     net_out=cfg.run.data_key,
+            #     device='cuda:0'
+            # )
+            ret = get_eaurc_mahalanobis_propagated(
                 wrapper=mahalanobis_detector,
                 data=data[data_key],
+                umap='cross_entropy',
                 net_out=cfg.run.data_key,
                 device='cuda:0'
             )

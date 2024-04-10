@@ -109,7 +109,6 @@ def get_precision_recall(
 
 
 
-
 def get_precision_recall_mahalanobis(
     model: nn.Module, 
     dataset: Dataset, 
@@ -142,9 +141,9 @@ def get_precision_recall_mahalanobis(
         input_ = batch['input'].to(device[0])
         gt = batch['target'].to(device[0])
         gt[gt == -1] = 0
-        model.transform = False
+        model.set_transform(False)
         output_original = model(input_)
-        model.transform = True
+        model.set_transform(True)
         output_transformed = model(input_)
 
         if net_out == 'brain':

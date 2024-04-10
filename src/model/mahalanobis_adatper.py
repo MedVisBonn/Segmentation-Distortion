@@ -14,13 +14,17 @@ def get_pooling_mahalanobis_detector(
     sigma_algorithm: str = 'default',
     fit:        str  = 'raw', # None, 'raw', 'augmented'
     iid_data:   DataLoader = None,
+    transform: bool = False,
+    lr: float = 1e-3,
     device:     str  = 'cuda:0',
 ): 
     pooling_detector = [
         PoolingMahalanobisDetector(
             swivel=swivel,
             device=device,
-            sigma_algorithm=sigma_algorithm
+            sigma_algorithm=sigma_algorithm,
+            transform=transform,
+            lr=lr,
         ) for swivel in swivels
     ]
     pooling_wrapper = PoolingMahalanobisWrapper(
@@ -84,15 +88,16 @@ class PoolingMahalanobisDetector(nn.Module):
         sigma_algorithm: str = 'default',
         # hook_fn:    str  = 'pre',
         transform:  bool = False,
+        lr:         float = 1e-3,
         device:     str  = 'cuda:0'
     ):
         super().__init__()
-        print(sigma_algorithm)
         # init args
         self.swivel = swivel
         self.sigma_algorithm = sigma_algorithm
         # self.hook_fn = self.register_forward_pre_hook if hook_fn == 'pre' else self.register_forward_hook
         self.transform = transform
+        self.lr = lr
         self.device = device
         # other attributes
         self.training_representations = []
@@ -103,10 +108,9 @@ class PoolingMahalanobisDetector(nn.Module):
 
     ### private methods ###
 
-    @torch.no_grad()
     def _reduce(self, x: Tensor) -> Tensor:
         # reduce dimensionality with 3D pooling to below 1e4 entries
-        while torch.prod(torch.tensor(x.shape[1:])) > 1e5:
+        while torch.prod(torch.tensor(x.shape[1:])) > 1e4:
             x = self._pool(x)
         x = self._pool(x)
         # reshape to (batch_size, 1, n_features)
@@ -117,6 +121,7 @@ class PoolingMahalanobisDetector(nn.Module):
     @torch.no_grad()
     def _collect(self, x: Tensor) -> None:
         # reduces dimensionality, moves to cpu and stores
+        
         x = self._reduce(x.detach()).cpu()
         self.training_representations.append(x)
 
@@ -134,19 +139,31 @@ class PoolingMahalanobisDetector(nn.Module):
     def _estimate_gaussians(self) -> None:
         self.mu = self.training_representations.mean(0, keepdims=True).detach().to(self.device)
         if self.sigma_algorithm == 'ledoitWolf':
-            self.sigma = torch.from_numpy(
-                LedoitWolf().fit(
-                    self.training_representations.squeeze(1)
-                ).covariance_
+            self.register_buffer(
+                'sigma', 
+                torch.from_numpy(
+                    LedoitWolf().fit(
+                        self.training_representations.squeeze(1)
+                    ).covariance_
+                )
             )
         elif self.sigma_algorithm == 'diagonal':
-            self.sigma = self.sigma = torch.var(self.training_representations.squeeze(1), dim=0).diag(0)
+            self.register_buffer(
+                'sigma',
+                torch.var(self.training_representations.squeeze(1), dim=0).diag(0)
+            )
         elif self.sigma_algorithm == 'default':
-            self.sigma = torch.cov(self.training_representations.squeeze(1).T)
+            self.register_buffer(
+                'sigma',
+                torch.cov(self.training_representations.squeeze(1).T)
+            )
         else:
             raise NotImplementedError('Choose from: lediotWolf, diagonal, default')
 
-        self.sigma_inv = torch.linalg.inv(self.sigma).detach().unsqueeze(0).to(self.device)
+        self.register_buffer(
+            'sigma_inv', 
+            torch.linalg.inv(self.sigma).detach().unsqueeze(0).to(self.device)
+        )
 
 
     def _distance(self, x: Tensor) -> Tensor:
@@ -168,17 +185,21 @@ class PoolingMahalanobisDetector(nn.Module):
 
 
     def forward(self, x: Tensor) -> Tensor:
+        # implements identity function from a hooks perspective
         if self.training:
             self._collect(x)
         
         else:
             self.batch_distances = self._distance(x).detach().view(-1)
+            if self.transform:
+                x = x.clone().detach().requires_grad_(True)
+                dist = self._distance(x).mean()
+                dist.backward()
+                x.data.sub_(self.lr * x.grad.data)
+                x.grad.data.zero_()
+                x.requires_grad = False
 
-        # implements identity function from a hooks perspective
-        if self.transform:
-            raise NotImplementedError('Implement transformation functionality')
-        else:
-            return x
+        return x
 
 
 class BatchNormMahalanobisDetector(nn.Module):
@@ -246,6 +267,7 @@ class BatchNormMahalanobisDetector(nn.Module):
         x: Tensor
     ) -> Tensor:
         # implements identity function from a hooks perspective
+        x_tmp = x.clone().detach()
         if self.training:
             pass
         else:

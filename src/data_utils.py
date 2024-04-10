@@ -1067,7 +1067,7 @@ def get_brain_train_loader(
 
     elif training == 'unet':
         return_orig = False
-        transform_key = 'all_transforms'
+        transform_key = 'global_transforms'
     # return_orig = True if training == 'dae' else False
     # transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
     
@@ -1169,12 +1169,12 @@ def get_heart_train_loader(
 
     elif training == 'mae':
         return_orig = False
-        train_transform_key = 'all_transforms'
+        train_transform_key = 'global_transforms'
         val_transform_key = 'io_transforms'
 
     elif training == 'unet':
         return_orig = False
-        train_transform_key = 'all_transforms'
+        train_transform_key = 'global_transforms'
         val_transform_key = 'io_transforms'
     
     # val_transform_key = 'local_val_transforms' if training == 'dae' else 'io_transforms'

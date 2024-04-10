@@ -5,14 +5,13 @@
 DATA_KEY=$1
 CUDA_DEVICE=$2
 DEBUG=$3
-DAE_POSTFIX=''
 DAE_RESIDUAL=false
 ## Globals
 LOG=true
 TRAIN=true
 EVAL=true
 ## Model params
-DAE_POSTFIX='_reconstruction'
+DAE_POSTFIX='_reconstruction_global'
 # DAE_RESIDUAL=false
 
 
@@ -22,7 +21,7 @@ for UNET_NAME in 'default-8'; do
     IFS=- read -r UNET_ARCH UNET_N_FILTERS_INIT UNET_DEPTH UNET_NUM_RES_UNITS <<< $UNET_NAME
 
     # for DAE_NAME in 'ResDAE-8' 'ResDAE-32' 'ResDAE-128' ; do 'CompressionDAE-bottleneck-3-4'  'ChannelDAE-bottleneck-3-4' 'ChannelDAE-all-3-1' 'ChannelDAE-all-3-1' 'ResDAE-bottleneck-32'
-    for DAE_NAME in 'CompressionDAE-bottleneck-3-4' ; do
+    for DAE_NAME in 'ResDAE-bottleneck-128' ; do
         # echo "UNET: $UNET_NAME, DAE: $DAE_NAME"
         IFS=- read -r DAE_ARCH PLACEMENT DAE_DEPTH DAE_BLOCK<<< $DAE_NAME
 

@@ -29,7 +29,7 @@ def main(
 
     # GLOBALS (temporary)
     AUROC = False
-    EAURC = False
+    EAURC = True
     PR    = True
 
     # get segmentation model
@@ -93,7 +93,7 @@ def main(
                 ood_data=data[key],
                 net_out=cfg.run.data_key,
                 dae=False,
-                umap='top2diff',
+                umap='entropy',
                 device='cuda:0'
             )
 
@@ -106,7 +106,7 @@ def main(
                         'data_key': cfg.run.data_key,
                         'run': cfg.run.iteration,
                         'domain': key,
-                        'method': f'top2diff',
+                        'method': f'entropy',
                         'unet': unet_name
                     }
                 )
@@ -115,7 +115,7 @@ def main(
             save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
             save_name = f'auroc_' + \
                 f'{cfg.run.data_key}_' + \
-                f'top2diff_' + \
+                f'entropy_' + \
                 f'{cfg.unet[cfg.run.data_key].pre}_' + \
                 f'{cfg.run.iteration}.csv'
             
@@ -133,7 +133,7 @@ def main(
                 data=data[key],
                 net_out=cfg.run.data_key,
                 dae=False,
-                umap='top2diff',
+                umap='entropy',
                 device='cuda:0'
             )
 
@@ -148,7 +148,7 @@ def main(
                         'data_key': cfg.run.data_key,
                         'run': cfg.run.iteration,
                         'domain': key,
-                        'method': f'top2diff',
+                        'method': f'entropy',
                         'unet': unet_name
                     }
                 )
@@ -157,7 +157,7 @@ def main(
             save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
             save_name = f'eaurc_' + \
                 f'{cfg.run.data_key}_' + \
-                f'top2diff_' + \
+                f'entropy_' + \
                 f'{cfg.unet[cfg.run.data_key].pre}_' + \
                 f'{cfg.run.iteration}.csv'
             
@@ -175,7 +175,7 @@ def main(
                 dataset=data[key],
                 net_out=cfg.run.data_key,
                 dae=False,
-                umap='top2diff',
+                umap='entropy',
                 n_taus='auto',
                 device=device,
             )
@@ -189,7 +189,7 @@ def main(
                         'data_key': cfg.run.data_key,
                         'run': cfg.run.iteration,
                         'domain': key,
-                        'method': f'top2diff',
+                        'method': f'entropy',
                         'unet': unet_name
                     }
                 )
@@ -199,7 +199,7 @@ def main(
             save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
             save_name = f'{cfg.run.data_key}_' + \
                 f'pr_' + \
-                f'top2diff_' + \
+                f'entropy_' + \
                 f'{cfg.unet[cfg.run.data_key].pre}_' + \
                 f'{cfg.run.iteration}.csv'
             

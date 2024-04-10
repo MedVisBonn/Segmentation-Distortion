@@ -64,10 +64,10 @@ def get_daes(
 
     if model == 'ResMAE':
         model = MaskedAutoencoderAdapter(
-                seg_model=unet,
-                transformations=daes,
-                disabled_ids=disabled_ids,
-                copy=True
+            seg_model=unet,
+            transformations=daes,
+            disabled_ids=disabled_ids,
+            copy=True
         )
     else:
         model = ModelAdapter(

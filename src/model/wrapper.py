@@ -438,6 +438,11 @@ class PoolingMahalanobisWrapper(nn.Module):
             adapter.fit()
 
 
+    def set_transform(self, transform: bool):
+        for adapter in self.adapters:
+            adapter.transform = transform
+
+
     def forward(
         self, 
         x: Tensor
@@ -496,6 +501,11 @@ class BatchNormMahalanobisWrapper(nn.Module):
         scores_aggregated = scores_raw.sum(1).sqrt()
 
         return scores_aggregated
+    
+    
+    def set_transform(self, transform: bool):
+        for adapter in self.adapters:
+            adapter.transform = transform
 
 
     def forward(
