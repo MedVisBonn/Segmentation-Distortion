@@ -17,7 +17,7 @@ data:
             data_path: 'data/nnUNet_preprocessed/Task679_MNM/'
             selection: 'all_cases'
 unet:
-    weight_dir: '../../pre-trained/trained_UNets/'
+    weight_dir: "../../pre-trained/trained_UNets/"
     log_dir: '../../pre-trained/trainer_logs/'
     brain: 
         pre: 'calgary_unet'

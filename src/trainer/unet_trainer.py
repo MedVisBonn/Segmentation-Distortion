@@ -98,18 +98,18 @@ def get_unet_heart_trainer(
         UNetTrainerACDC: trainer object
     """
 
+
     model_cfg                 = cfg.unet[cfg.run.data_key]
     num_batches_per_epoch     = model_cfg.training.num_batches_per_epoch
     num_val_batches_per_epoch = model_cfg.training.num_val_batches_per_epoch
     description               = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
-    weight_dir                = cfg.unet.weight_dir,
-    log_dir                   = cfg.unet.log_dir, 
     lr                        = model_cfg.training.lr
     n_epochs                  = model_cfg.training.epochs
     patience                  = model_cfg.training.patience
     log                       = cfg.wandb.log
     criterion                 = CrossEntropyTargetArgmax()
     eval_metrics              = {"Volumetric Dice": DiceScoreMMS()}
+
 
     return UNetTrainerACDC(
         model=model, 
@@ -118,8 +118,8 @@ def get_unet_heart_trainer(
         val_loader=val_loader,
         num_batches_per_epoch=num_batches_per_epoch,
         num_val_batches_per_epoch=num_val_batches_per_epoch,
-        weight_dir=weight_dir,
-        log_dir=log_dir, 
+        weight_dir=cfg.unet.weight_dir,
+        log_dir=cfg.unet.log_dir, 
         description=description, 
         lr=lr, 
         n_epochs=n_epochs, 
@@ -155,8 +155,6 @@ def get_unet_brain_trainer(
     n_epochs              = model_cfg.training.epochs
     patience              = model_cfg.training.patience
     num_batches_per_epoch = model_cfg.training.num_batches_per_epoch
-    weight_dir            = cfg.unet.weight_dir,
-    log_dir               = cfg.unet.log_dir,
     log                   = cfg.wandb.log
     # criterion             = nn.CrossEntropyLoss()
     criterion             = nn.BCEWithLogitsLoss()
@@ -170,8 +168,8 @@ def get_unet_brain_trainer(
         criterion=criterion, 
         train_generator=train_loader, 
         val_loader=val_loader, 
-        weight_dir=weight_dir,
-        log_dir=log_dir,
+        weight_dir=cfg.unet.weight_dir,
+        log_dir=cfg.unet.log_dir,
         description=description,
         lr=lr, 
         n_epochs=n_epochs,
@@ -261,12 +259,12 @@ class UNetTrainerCalgary():
     
     
     def load_model(self):
-        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.weight_dir}{self.description}.npy'
+        savepath = f'{self.log_dir}{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
         # try:
@@ -672,12 +670,12 @@ class UNetTrainerACDC():
     
     
     def load_model(self):
-        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
         print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.weight_dir}{self.description}.npy'
+        savepath = f'{self.log_dir}{self.description}.npy'
         self.history = np.load(savepath,allow_pickle='TRUE').item()
         
         return
