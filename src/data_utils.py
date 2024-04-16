@@ -56,14 +56,256 @@ from batchgenerators.dataloading.single_threaded_augmenter import SingleThreaded
 from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
 from batchgenerators.dataloading.multi_threaded_augmenter import producer, results_loop
 
-
-
-
-
-
 from dataset import *
 
 
+
+def get_train_loader(
+    training: str,
+    cfg: OmegaConf
+):
+    """ Instantiates dataloaders for either Calgary-Campinas or ACDC dataset.
+
+    Args:
+        training (str): Either 'unet' or 'dae'
+        cfg (OmegaConf): data config. 
+            Contains the task specific data paths and the data_key.
+
+    Returns:
+        train_loader (MultiThreadedAugmenter): Training data generator.
+        val_loader (MultiThreadedAugmenter): Validation data generator.
+    """
+
+    if cfg.run.data_key == 'brain':
+        train_loader, val_loader = get_brain_train_loader(training=training, cfg=cfg)
+    elif cfg.run.data_key == 'heart':
+        train_loader, val_loader = get_heart_train_loader(training=training, cfg=cfg)
+    else:
+        raise ValueError(f"Unknown task {cfg.run.data_key}. Task key must be either 'brain' or 'heart'")
+    return train_loader, val_loader
+
+
+
+def get_brain_train_loader(
+    training: str, # unet or dae
+    cfg: OmegaConf
+):
+    """ Instantiates dataloaders for Calgary-Campinas dataset.
+
+    Args:
+        training (str): Either 'unet' or 'dae'
+        cfg (OmegaConf): data config. For details see wrapper class.
+
+    Returns:
+        train_gen (MultiThreadedAugmenter): Training data generator.
+        valid_gen (MultiThreadedAugmenter): Validation data generator.
+    """
+
+    if training == 'dae':
+        return_orig = True
+        transform_key = 'local_transforms'
+
+    elif training == 'mae':
+        return_orig = False
+        transform_key = 'global_transforms'
+
+    elif training == 'unet':
+        return_orig = False
+        transform_key = cfg.run.transform_key
+    # return_orig = True if training == 'dae' else False
+    # transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
+    
+    data_path = cfg.fs.root + cfg.data.brain.data_path
+    model_cfg = cfg.unet.brain
+    
+    train_set = CalgaryCampinasDataset(
+        data_path=data_path, 
+        site=model_cfg.training.train_site,
+        augment=False, 
+        normalize=True, 
+        split='train', 
+        debug=cfg.debug
+    )
+    
+    train_loader = MultiImageSingleViewDataLoader(
+        data=train_set, 
+        batch_size=model_cfg.training.batch_size,
+        return_orig=return_orig
+    )
+    
+    transforms = Transforms()
+    train_augmentor = transforms.get_transforms(transform_key)
+    train_gen = MultiThreadedAugmenter(
+        data_loader = train_loader, 
+        transform = train_augmentor, 
+        num_processes = 4, 
+        num_cached_per_queue = 2, 
+        seeds=None
+    )
+    
+    if training == 'unet':
+        valid_set = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=model_cfg.training.train_site,
+            normalize=True, 
+            volume_wise=True,
+            split='validation', 
+            debug=cfg.debug
+        )
+
+        valid_gen = DataLoader(
+            valid_set, 
+            batch_size=1,
+            shuffle=False, 
+            drop_last=False, 
+            collate_fn=volume_collate
+        )
+        
+    elif training == 'dae':
+        valid_set = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=model_cfg.training.train_site,
+            augment=False, 
+            normalize=True, 
+            split='validation', 
+            debug=cfg.debug
+        )
+
+        valid_augmentor = transforms.get_transforms('local_val_transforms')
+        valid_loader = MultiImageSingleViewDataLoader(
+            valid_set,
+            batch_size=model_cfg.training.batch_size,
+            return_orig=True
+        )
+        valid_gen = MultiThreadedAugmenter(
+            data_loader = valid_loader, 
+            transform = valid_augmentor, 
+            num_processes = 4, 
+            num_cached_per_queue = 2, 
+            seeds=None
+        )
+
+
+    elif training == 'mae':
+        valid_set = CalgaryCampinasDataset(
+            data_path=data_path, 
+            site=model_cfg.training.train_site,
+            augment=False, 
+            normalize=True, 
+            split='validation', 
+            debug=cfg.debug
+        )
+
+        valid_augmentor = transforms.get_transforms('io_transforms')
+        valid_loader = MultiImageSingleViewDataLoader(
+            valid_set,
+            batch_size=model_cfg.training.batch_size,
+            return_orig=True
+        )
+        valid_gen = MultiThreadedAugmenter(
+            data_loader = valid_loader, 
+            transform = valid_augmentor, 
+            num_processes = 4, 
+            num_cached_per_queue = 2, 
+            seeds=None
+        )
+    
+    return train_gen, valid_gen
+
+
+
+def get_heart_train_loader(
+    training: str,
+    cfg: OmegaConf
+):
+    """ Instantiates dataloaders for ACDC dataset.
+    
+    Args:
+        training (str): Either 'unet' or 'dae'
+        cfg (OmegaConf): data config. For details see wrapper class.
+
+    Returns:
+        train_gen (MultiThreadedAugmenter): Training data generator.
+        valid_gen (MultiThreadedAugmenter): Validation data generator.
+    """
+    
+    # return_orig = True if training == 'dae' else False
+    # train_transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
+    if training == 'dae':
+        return_orig = True
+        train_transform_key = 'local_transforms'
+        val_transform_key = 'local_val_transforms'
+
+    elif training == 'mae':
+        return_orig = False
+        train_transform_key = 'global_transforms'
+        val_transform_key = 'io_transforms'
+
+    elif training == 'unet':
+        return_orig = False
+        train_transform_key = cfg.run.transform_key
+        val_transform_key = 'io_transforms'
+    
+    # val_transform_key = 'local_val_transforms' if training == 'dae' else 'io_transforms'
+
+    model_cfg = cfg.unet.heart
+    
+    transforms = Transforms()
+    train_set = ACDCDataset(
+        data="train",
+        debug=cfg.debug,
+        root=cfg.fs.root,
+        folder=cfg.data.heart.acdc.data_path
+    )
+    train_loader = MultiImageSingleViewDataLoader(
+        data=train_set,
+        batch_size=model_cfg.training.batch_size,
+        return_orig=return_orig
+    )    
+    train_augmentor = transforms.get_transforms(train_transform_key)
+    train_gen = MultiThreadedAugmenter(
+        data_loader = train_loader,
+        transform = train_augmentor,
+        num_processes = 4,
+        num_cached_per_queue = 2,
+        seeds=None
+    )
+    # train_gen = SingleThreadedAugmenter(
+    #     data_loader = train_loader,
+    #     transform = train_augmentor,
+    #     # num_processes = 1,
+    #     # num_cached_per_queue = 1,
+    #     # seeds=None
+    # )
+    
+    val_set = ACDCDataset(
+        data="val",
+        debug=cfg['debug'],
+        root=cfg.fs.root,
+        folder=cfg.data.heart.acdc.data_path
+    )
+    valid_loader = MultiImageSingleViewDataLoader(
+        data=val_set, 
+        batch_size=model_cfg.training.batch_size,
+        return_orig=return_orig
+    )
+    valid_augmentor = transforms.get_transforms(val_transform_key)
+    valid_gen = MultiThreadedAugmenter(
+        data_loader = valid_loader, 
+        transform = valid_augmentor, 
+        num_processes = 4, 
+        num_cached_per_queue = 2, 
+        seeds=None
+    )
+    # valid_gen = SingleThreadedAugmenter(
+    #     data_loader = valid_loader, 
+    #     transform = valid_augmentor, 
+    #     # num_processes = 4, 
+    #     # num_cached_per_queue = 2, 
+    #     # seeds=None
+    # )
+    
+    return train_gen, valid_gen
 
 class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
     """Single image multi view dataloader.
@@ -326,7 +568,18 @@ class Transforms(object):
         self, 
         arg: str
     ) -> AbstractTransform:
-        return Compose(self.transforms[arg])
+        if arg in self.transforms:
+            return Compose(self.transforms[arg])
+
+        elif 'global_without' in arg:
+            print(arg.split('_')[-1])
+            missing_transform = arg.split('_')[-1]
+            return Compose(list(
+                filter(
+                    lambda x: x.__class__.__name__ != missing_transform,
+                    self.transforms['global_transforms']
+                )
+            ))
 
 
 
@@ -1014,226 +1267,3 @@ class MultiThreadedAugmenter(object):
         logging.debug("MultiThreadedGenerator: destructor was called")
         self._finish()
     
-
-
-def get_train_loader(
-    training: str,
-    cfg: OmegaConf
-):
-    """ Instantiates dataloaders for either Calgary-Campinas or ACDC dataset.
-
-    Args:
-        training (str): Either 'unet' or 'dae'
-        cfg (OmegaConf): data config. 
-            Contains the task specific data paths and the data_key.
-
-    Returns:
-        train_loader (MultiThreadedAugmenter): Training data generator.
-        val_loader (MultiThreadedAugmenter): Validation data generator.
-    """
-
-    if cfg.run.data_key == 'brain':
-        train_loader, val_loader = get_brain_train_loader(training=training, cfg=cfg)
-    elif cfg.run.data_key == 'heart':
-        train_loader, val_loader = get_heart_train_loader(training=training, cfg=cfg)
-    else:
-        raise ValueError(f"Unknown task {cfg.run.data_key}. Task key must be either 'brain' or 'heart'")
-    return train_loader, val_loader
-
-
-
-def get_brain_train_loader(
-    training: str, # unet or dae
-    cfg: OmegaConf
-):
-    """ Instantiates dataloaders for Calgary-Campinas dataset.
-
-    Args:
-        training (str): Either 'unet' or 'dae'
-        cfg (OmegaConf): data config. For details see wrapper class.
-
-    Returns:
-        train_gen (MultiThreadedAugmenter): Training data generator.
-        valid_gen (MultiThreadedAugmenter): Validation data generator.
-    """
-
-    if training == 'dae':
-        return_orig = True
-        transform_key = 'local_transforms'
-
-    elif training == 'mae':
-        return_orig = False
-        transform_key = 'all_transforms'
-
-    elif training == 'unet':
-        return_orig = False
-        transform_key = 'global_transforms'
-    # return_orig = True if training == 'dae' else False
-    # transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
-    
-    data_path = cfg.fs.root + cfg.data.brain.data_path
-    model_cfg = cfg.unet.brain
-    
-    train_set = CalgaryCampinasDataset(
-        data_path=data_path, 
-        site=model_cfg.training.train_site,
-        augment=False, 
-        normalize=True, 
-        split='train', 
-        debug=cfg.debug
-    )
-    
-    train_loader = MultiImageSingleViewDataLoader(
-        data=train_set, 
-        batch_size=model_cfg.training.batch_size,
-        return_orig=return_orig
-    )
-    
-    transforms = Transforms()
-    train_augmentor = transforms.get_transforms(transform_key)
-    train_gen = MultiThreadedAugmenter(
-        data_loader = train_loader, 
-        transform = train_augmentor, 
-        num_processes = 4, 
-        num_cached_per_queue = 2, 
-        seeds=None
-    )
-    
-    if training == 'unet':
-        valid_set = CalgaryCampinasDataset(
-            data_path=data_path, 
-            site=model_cfg.training.train_site,
-            normalize=True, 
-            volume_wise=True,
-            split='validation', 
-            debug=cfg.debug
-        )
-
-        valid_gen = DataLoader(
-            valid_set, 
-            batch_size=1,
-            shuffle=False, 
-            drop_last=False, 
-            collate_fn=volume_collate
-        )
-        
-    elif training == 'dae':
-        valid_set = CalgaryCampinasDataset(
-            data_path=data_path, 
-            site=model_cfg.training.train_site,
-            augment=False, 
-            normalize=True, 
-            split='validation', 
-            debug=cfg.debug
-        )
-
-        valid_augmentor = transforms.get_transforms('local_val_transforms')
-        valid_loader = MultiImageSingleViewDataLoader(
-            valid_set,
-            batch_size=model_cfg.training.batch_size,
-            return_orig=True
-        )
-        valid_gen = MultiThreadedAugmenter(
-            data_loader = valid_loader, 
-            transform = valid_augmentor, 
-            num_processes = 4, 
-            num_cached_per_queue = 2, 
-            seeds=None
-        )
-    
-    return train_gen, valid_gen
-
-
-
-def get_heart_train_loader(
-    training: str,
-    cfg: OmegaConf
-):
-    """ Instantiates dataloaders for ACDC dataset.
-    
-    Args:
-        training (str): Either 'unet' or 'dae'
-        cfg (OmegaConf): data config. For details see wrapper class.
-
-    Returns:
-        train_gen (MultiThreadedAugmenter): Training data generator.
-        valid_gen (MultiThreadedAugmenter): Validation data generator.
-    """
-    
-    # return_orig = True if training == 'dae' else False
-    # train_transform_key = 'local_transforms' if training == 'dae' else 'all_transforms'
-    if training == 'dae':
-        return_orig = True
-        train_transform_key = 'local_transforms'
-        val_transform_key = 'local_val_transforms'
-
-    elif training == 'mae':
-        return_orig = False
-        train_transform_key = 'global_transforms'
-        val_transform_key = 'io_transforms'
-
-    elif training == 'unet':
-        return_orig = False
-        train_transform_key = 'global_transforms'
-        val_transform_key = 'io_transforms'
-    
-    # val_transform_key = 'local_val_transforms' if training == 'dae' else 'io_transforms'
-
-    model_cfg = cfg.unet.heart
-    
-    transforms = Transforms()
-    train_set = ACDCDataset(
-        data="train",
-        debug=cfg.debug,
-        root=cfg.fs.root,
-        folder=cfg.data.heart.acdc.data_path
-    )
-    train_loader = MultiImageSingleViewDataLoader(
-        data=train_set,
-        batch_size=model_cfg.training.batch_size,
-        return_orig=return_orig
-    )    
-    train_augmentor = transforms.get_transforms(train_transform_key)
-    train_gen = MultiThreadedAugmenter(
-        data_loader = train_loader,
-        transform = train_augmentor,
-        num_processes = 4,
-        num_cached_per_queue = 2,
-        seeds=None
-    )
-    # train_gen = SingleThreadedAugmenter(
-    #     data_loader = train_loader,
-    #     transform = train_augmentor,
-    #     # num_processes = 1,
-    #     # num_cached_per_queue = 1,
-    #     # seeds=None
-    # )
-    
-    val_set = ACDCDataset(
-        data="val",
-        debug=cfg['debug'],
-        root=cfg.fs.root,
-        folder=cfg.data.heart.acdc.data_path
-    )
-    valid_loader = MultiImageSingleViewDataLoader(
-        data=val_set, 
-        batch_size=model_cfg.training.batch_size,
-        return_orig=return_orig
-    )
-    valid_augmentor = transforms.get_transforms(val_transform_key)
-    valid_gen = MultiThreadedAugmenter(
-        data_loader = valid_loader, 
-        transform = valid_augmentor, 
-        num_processes = 4, 
-        num_cached_per_queue = 2, 
-        seeds=None
-    )
-    # valid_gen = SingleThreadedAugmenter(
-    #     data_loader = valid_loader, 
-    #     transform = valid_augmentor, 
-    #     # num_processes = 4, 
-    #     # num_cached_per_queue = 2, 
-    #     # seeds=None
-    # )
-    
-    return train_gen, valid_gen
