@@ -278,7 +278,10 @@ class BatchNormMahalanobisDetector(nn.Module):
         
         if self.transform:
             x = x.clone().detach().requires_grad_(True)
-            dist = self._distance(x).mean()
+            dist = self._distance(x)
+            print('STOP!! You forgot to look at this, otherwise it wouldnt show!')
+            print(f'dist: {dist.shape}')
+            dist = dist.sum(dim=(1,2,3)).mean()
             dist.backward()
             x.data.sub_(self.lr * x.grad.data)
             x.grad.data.zero_()
