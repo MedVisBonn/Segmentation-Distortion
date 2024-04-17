@@ -9,19 +9,21 @@ from model.wrapper import PoolingMahalanobisWrapper, BatchNormMahalanobisWrapper
 
 
 def get_pooling_mahalanobis_detector(
-    swivels:    List[str],
-    unet:       nn.Module = None,
+    swivels: List[str],
+    unet: nn.Module = None,
+    pool: str = 'avg2d',
     sigma_algorithm: str = 'default',
-    fit:        str  = 'raw', # None, 'raw', 'augmented'
-    iid_data:   DataLoader = None,
+    fit: str  = 'raw', # None, 'raw', 'augmented'
+    iid_data: DataLoader = None,
     transform: bool = False,
     lr: float = 1e-3,
-    device:     str  = 'cuda:0',
+    device: str  = 'cuda:0',
 ): 
     pooling_detector = [
         PoolingMahalanobisDetector(
             swivel=swivel,
             device=device,
+            pool=pool,
             sigma_algorithm=sigma_algorithm,
             transform=transform,
             lr=lr,
@@ -84,12 +86,12 @@ def get_batchnorm_mahalanobis_detector(
 class PoolingMahalanobisDetector(nn.Module):
     def __init__(
         self,
-        swivel:     str,
+        swivel: str,
+        pool: str = 'avg2d',
         sigma_algorithm: str = 'default',
-        # hook_fn:    str  = 'pre',
-        transform:  bool = False,
-        lr:         float = 1e-3,
-        device:     str  = 'cuda:0'
+        transform: bool = False,
+        lr: float = 1e-3,
+        device: str  = 'cuda:0'
     ):
         super().__init__()
         # init args
@@ -102,17 +104,29 @@ class PoolingMahalanobisDetector(nn.Module):
         # other attributes
         self.training_representations = []
         # methods
-        self._pool = nn.AvgPool2d(kernel_size=(2,2), stride=(2,2))
+        if pool == 'avg2d':
+            self._pool = nn.AvgPool2d(
+                kernel_size=(2,2), 
+                stride=(2,2)
+            )
+        elif pool == 'avg3d':
+            self._pool = nn.AvgPool3d(
+                kernel_size=(2,2,2),
+                stride=(2,2,2)
+            )
         self.to(device)
 
 
     ### private methods ###
 
     def _reduce(self, x: Tensor) -> Tensor:
-        # reduce dimensionality with 3D pooling to below 1e4 entries
-        while torch.prod(torch.tensor(x.shape[1:])) > 1e4:
+        if 'avg' in self.pool:
+            # reduce dimensionality with 3D pooling to below 1e4 entries
+            while torch.prod(torch.tensor(x.shape[1:])) > 1e4:
+                x = self._pool(x)
             x = self._pool(x)
-        x = self._pool(x)
+        elif self.pool == 'none':
+            pass
         # reshape to (batch_size, 1, n_features)
         x = x.reshape(x.shape[0], 1, -1)
         return x
@@ -138,7 +152,28 @@ class PoolingMahalanobisDetector(nn.Module):
     @torch.no_grad()
     def _estimate_gaussians(self) -> None:
         self.mu = self.training_representations.mean(0, keepdims=True).detach().to(self.device)
-        if self.sigma_algorithm == 'ledoitWolf':
+        
+        if self.sigma_algorithm == 'diagonal':
+            self.register_buffer(
+                'sigma',
+                torch.var(self.training_representations.squeeze(1), dim=0)
+            )
+            self.register_buffer(
+                'sigma_inv', 
+                1 / torch.sqrt(self.var)
+            )
+        
+        elif self.sigma_algorithm == 'default':
+            self.register_buffer(
+                'sigma',
+                torch.cov(self.training_representations.squeeze(1).T)
+            )
+            self.register_buffer(
+                'sigma_inv', 
+                torch.linalg.inv(self.sigma).detach().unsqueeze(0).to(self.device)
+            )
+
+        elif self.sigma_algorithm == 'ledoitWolf':
             self.register_buffer(
                 'sigma', 
                 torch.from_numpy(
@@ -147,23 +182,13 @@ class PoolingMahalanobisDetector(nn.Module):
                     ).covariance_
                 )
             )
-        elif self.sigma_algorithm == 'diagonal':
             self.register_buffer(
-                'sigma',
-                torch.var(self.training_representations.squeeze(1), dim=0).diag(0)
+                'sigma_inv', 
+                torch.linalg.inv(self.sigma).detach().unsqueeze(0).to(self.device)
             )
-        elif self.sigma_algorithm == 'default':
-            self.register_buffer(
-                'sigma',
-                torch.cov(self.training_representations.squeeze(1).T)
-            )
+
         else:
             raise NotImplementedError('Choose from: lediotWolf, diagonal, default')
-
-        self.register_buffer(
-            'sigma_inv', 
-            torch.linalg.inv(self.sigma).detach().unsqueeze(0).to(self.device)
-        )
 
 
     def _distance(self, x: Tensor) -> Tensor:
@@ -171,7 +196,10 @@ class PoolingMahalanobisDetector(nn.Module):
         # assert self.device == x.device, 'input and model device must match'
         x_reduced  = self._reduce(x)
         x_centered = x_reduced - self.mu
-        dist       = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
+        if self.sigma_algorithm == 'diagonal':
+            dist = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
+        else:
+            dist  = x_centered**2 * self.sigma_inv
 
         return torch.sqrt(dist)
 
@@ -267,7 +295,7 @@ class BatchNormMahalanobisDetector(nn.Module):
         x: Tensor
     ) -> Tensor:
         # implements identity function from a hooks perspective
-        x_tmp = x.clone().detach()
+        # x_tmp = x.clone().detach()
         if self.training:
             pass
         else:
@@ -278,10 +306,10 @@ class BatchNormMahalanobisDetector(nn.Module):
         
         if self.transform:
             x = x.clone().detach().requires_grad_(True)
-            dist = self._distance(x)
-            print('STOP!! You forgot to look at this, otherwise it wouldnt show!')
-            print(f'dist: {dist.shape}')
-            dist = dist.sum(dim=(1,2,3)).mean()
+            dist = self._distance(x).mean()
+            # print('STOP!! You forgot to look at this, otherwise it wouldnt show!')
+            # print(f'dist: {dist.shape}')
+            # dist = dist.sum(dim=(1,2)).mean()
             dist.backward()
             x.data.sub_(self.lr * x.grad.data)
             x.grad.data.zero_()
