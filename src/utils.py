@@ -146,6 +146,13 @@ class UMapGenerator(nn.Module):
             umap = 1 - (x_prob_sorted[:, -1:] - x_prob_sorted[:, -2:-1])
             assert len(umap.shape) == 4, f"umap shape is {umap.shape}, but should be (n, 1, h, w)"
 
+        elif self.method == 'top2diff_diff':
+            output_prob, output_augmented_prob = torch.split(self.m(x), batch_size)
+            output_prob_sorted, _ = output_prob.sort(1)
+            output_augmented_prob_sorted, _ = output_augmented_prob.sort(1)
+            umap = (output_prob_sorted[:, -1:] - output_prob_sorted[:, -2:-1]) - \
+                   (output_augmented_prob_sorted[:, -1:] - output_augmented_prob_sorted[:, -2:-1])
+
         elif self.method == 'kld_entr':
             output_prob, output_augmented_prob = torch.split(self.m(x), batch_size)
             output_augmented_log_prob = torch.log(output_augmented_prob + 1e7)

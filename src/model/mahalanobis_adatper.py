@@ -84,7 +84,6 @@ def get_batchnorm_mahalanobis_detector(
 
 
 
-
 class PoolingMahalanobisDetector(nn.Module):
     def __init__(
         self,
@@ -203,7 +202,7 @@ class PoolingMahalanobisDetector(nn.Module):
         x_reduced  = self._reduce(x)
         x_centered = x_reduced - self.mu
         if self.sigma_algorithm == 'diagonal':
-            dist  = x_centered**2 * self.sigma_inv
+            dist = x_centered**2 * self.sigma_inv
             dist = dist.sum(1)
         else:
             dist = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
@@ -237,6 +236,7 @@ class PoolingMahalanobisDetector(nn.Module):
                 x.requires_grad = False
 
         return x
+
 
 
 class BatchNormMahalanobisDetector(nn.Module):
