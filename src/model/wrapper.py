@@ -443,6 +443,11 @@ class PoolingMahalanobisWrapper(nn.Module):
             adapter.transform = transform
 
 
+    def set_lr(self, lr: float):
+        for adapter in self.adapters:
+            adapter.lr = lr
+
+
     def forward(
         self, 
         x: Tensor
@@ -506,6 +511,11 @@ class BatchNormMahalanobisWrapper(nn.Module):
     def set_transform(self, transform: bool):
         for adapter in self.adapters:
             adapter.transform = transform
+
+
+    def set_lr(self, lr: float):
+        for adapter in self.adapters:
+            adapter.lr = lr
 
 
     def forward(

@@ -19,6 +19,7 @@ def get_pooling_mahalanobis_detector(
     lr: float = 1e-3,
     device: str  = 'cuda:0',
 ): 
+
     pooling_detector = [
         PoolingMahalanobisDetector(
             swivel=swivel,
@@ -83,6 +84,7 @@ def get_batchnorm_mahalanobis_detector(
 
 
 
+
 class PoolingMahalanobisDetector(nn.Module):
     def __init__(
         self,
@@ -96,6 +98,7 @@ class PoolingMahalanobisDetector(nn.Module):
         super().__init__()
         # init args
         self.swivel = swivel
+        self.pool = pool
         self.sigma_algorithm = sigma_algorithm
         # self.hook_fn = self.register_forward_pre_hook if hook_fn == 'pre' else self.register_forward_hook
         self.transform = transform
@@ -104,12 +107,12 @@ class PoolingMahalanobisDetector(nn.Module):
         # other attributes
         self.training_representations = []
         # methods
-        if pool == 'avg2d':
+        if self.pool == 'avg2d':
             self._pool = nn.AvgPool2d(
                 kernel_size=(2,2), 
                 stride=(2,2)
             )
-        elif pool == 'avg3d':
+        elif self.pool == 'avg3d':
             self._pool = nn.AvgPool3d(
                 kernel_size=(2,2,2),
                 stride=(2,2,2)
@@ -151,16 +154,19 @@ class PoolingMahalanobisDetector(nn.Module):
 
     @torch.no_grad()
     def _estimate_gaussians(self) -> None:
-        self.mu = self.training_representations.mean(0, keepdims=True).detach().to(self.device)
+        self.register_buffer(
+            'mu',
+            self.training_representations.mean(0, keepdims=True).detach().to(self.device)
+        )
         
         if self.sigma_algorithm == 'diagonal':
             self.register_buffer(
-                'sigma',
-                torch.var(self.training_representations.squeeze(1), dim=0)
+                'var',
+                torch.var(self.training_representations.squeeze(1), dim=0).detach()
             )
             self.register_buffer(
                 'sigma_inv', 
-                1 / torch.sqrt(self.var)
+                1 / torch.sqrt(self.var).detach().to(self.device)
             )
         
         elif self.sigma_algorithm == 'default':
@@ -191,15 +197,16 @@ class PoolingMahalanobisDetector(nn.Module):
             raise NotImplementedError('Choose from: lediotWolf, diagonal, default')
 
 
+
     def _distance(self, x: Tensor) -> Tensor:
         assert self.sigma_inv is not None, 'fit the model first'
-        # assert self.device == x.device, 'input and model device must match'
         x_reduced  = self._reduce(x)
         x_centered = x_reduced - self.mu
         if self.sigma_algorithm == 'diagonal':
-            dist = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
-        else:
             dist  = x_centered**2 * self.sigma_inv
+            dist = dist.sum(1)
+        else:
+            dist = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
 
         return torch.sqrt(dist)
 
@@ -221,8 +228,10 @@ class PoolingMahalanobisDetector(nn.Module):
             self.batch_distances = self._distance(x).detach().view(-1)
             if self.transform:
                 x = x.clone().detach().requires_grad_(True)
-                dist = self._distance(x).mean()
+                dist_tmp = self._distance(x)
+                dist = dist_tmp.sum()
                 dist.backward()
+                x.grad.data = torch.nan_to_num(x.grad.data, nan=0.0)
                 x.data.sub_(self.lr * x.grad.data)
                 x.grad.data.zero_()
                 x.requires_grad = False
@@ -256,11 +265,14 @@ class BatchNormMahalanobisDetector(nn.Module):
         self, 
         x: Tensor
     ) -> Tensor:
+        
         if self.aggregate == 'mean':
-            x = x.mean(dim=(2,3)).unsqueeze(1)
+            x = x.mean(dim=(2,3), keepdim=True)
         elif self.aggregate == 'max':
             x = (x - self.mu.view((1, -1, 1, 1)).abs())
             x = x.amax(dim=(2,3)).unsqueeze(1)
+        elif self.aggregate == 'none':
+            pass
         else:
             raise NotImplementedError(f'{self.aggregate} not implemented, choose from: [mean, max]')
 
@@ -275,7 +287,7 @@ class BatchNormMahalanobisDetector(nn.Module):
         x = (x - self.mu)**2
         dist = (x * self.sigma_inv)
         if self.reduce:
-            dist = torch.sqrt(dist.sum(dim=(1,2), keepdim=True))
+            dist = torch.sqrt(dist.sum(dim=(1,2,3), keepdim=True))
         return dist
 
 
@@ -285,8 +297,8 @@ class BatchNormMahalanobisDetector(nn.Module):
         self,
         params
     ) -> None:
-        self.register_buffer('mu', params.running_mean.detach().unsqueeze(0).to(self.device))
-        self.register_buffer('var', params.running_var.detach().unsqueeze(0).to(self.device))
+        self.register_buffer('mu', params.running_mean.detach().view(1, -1, 1, 1).to(self.device))
+        self.register_buffer('var', params.running_var.detach().view(1, -1, 1, 1).to(self.device))
         self.register_buffer('sigma_inv', 1 / torch.sqrt(self.var))
 
 
@@ -295,7 +307,6 @@ class BatchNormMahalanobisDetector(nn.Module):
         x: Tensor
     ) -> Tensor:
         # implements identity function from a hooks perspective
-        # x_tmp = x.clone().detach()
         if self.training:
             pass
         else:
@@ -307,9 +318,6 @@ class BatchNormMahalanobisDetector(nn.Module):
         if self.transform:
             x = x.clone().detach().requires_grad_(True)
             dist = self._distance(x).mean()
-            # print('STOP!! You forgot to look at this, otherwise it wouldnt show!')
-            # print(f'dist: {dist.shape}')
-            # dist = dist.sum(dim=(1,2)).mean()
             dist.backward()
             x.data.sub_(self.lr * x.grad.data)
             x.grad.data.zero_()

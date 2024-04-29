@@ -113,6 +113,8 @@ class UMapGenerator(nn.Module):
         self.net_out = net_out
         self.m       = nn.Softmax(dim=1) if net_out=='heart' else nn.Sigmoid()
         self.ce      = nn.CrossEntropyLoss(reduction='none') if net_out=='heart' else nn.BCEWithLogitsLoss(reduction='none')
+        self.kld     = nn.KLDivLoss(reduction='none')
+        self.mse     = nn.MSELoss(reduction='none')
     
     @torch.no_grad()
     def forward(self, x: Tensor, batch_size: int = 1) -> Tensor:
@@ -143,6 +145,40 @@ class UMapGenerator(nn.Module):
             x_prob_sorted, _ = x_prob.sort(1)
             umap = 1 - (x_prob_sorted[:, -1:] - x_prob_sorted[:, -2:-1])
             assert len(umap.shape) == 4, f"umap shape is {umap.shape}, but should be (n, 1, h, w)"
+
+        elif self.method == 'kld_entr':
+            output_prob, output_augmented_prob = torch.split(self.m(x), batch_size)
+            output_augmented_log_prob = torch.log(output_augmented_prob + 1e7)
+            # output_augmented_prob = self.m(x[batch_size:])
+            entropy = torch.special.entr(output_prob).sum(dim=1, keepdims=True)
+            # print(f'entropy: {entropy.shape} {entropy.mean()}')
+            kld = self.kld(output_augmented_log_prob, output_prob).sum(dim=1, keepdims=True)
+            # print(f'kld: {kld.shape} {kld.mean()}')
+            umap = entropy * kld
+
+        elif self.method == 'mse_entr':
+            output_prob, output_augmented_prob = torch.split(self.m(x), batch_size)
+            output_augmented_log_prob = torch.log(output_augmented_prob + 1e7)
+            # output_augmented_prob = self.m(x[batch_size:])
+            entropy = torch.special.entr(output_prob).sum(dim=1, keepdims=True)
+            # print(f'entropy: {entropy.shape} {entropy.mean()}')
+            mse = self.mse(output_prob, output_augmented_prob).mean(dim=1, keepdims=True)
+            # print(f'kld: {kld.shape} {kld.mean()}')
+            umap = entropy * mse
+
+        elif self.method == 'centr_entr':
+            output_prob, output_augmented_prob = torch.split(self.m(x), batch_size)
+            entropy = torch.special.entr(output_prob).sum(dim=1, keepdims=True)
+            ce = self.ce(output_prob, output_augmented_prob).unsqueeze(1)#.sum(dim=1, keepdims=True)
+            umap = entropy * ce
+
+        elif self.method == 'diff_grad':
+            output_prob, output_augmented_prob = torch.split(self.m(x), batch_size)
+            predicted_class_prob, index_of_class = output_prob.max(dim=1, keepdim=True)
+            diff_to_pred = predicted_class_prob - output_prob
+            diff_to_pred_augmented = torch.gather(output_augmented_prob, 1, index_of_class) - output_augmented_prob
+            umap = (diff_to_pred - diff_to_pred_augmented) / torch.max(diff_to_pred, torch.ones_like(diff_to_pred) * 1e7)
+            umap = torch.amax(umap, dim=1, keepdim=True)
         
         #################################
         ### experimental / M&M only   ###
@@ -220,6 +256,7 @@ class UMapGenerator(nn.Module):
 #                 umap    = - x_probs * torch.log(x_probs+1e-6) - (1-x_probs) * torch.log(1-x_probs+1e-6)
         
         assert umap.shape[1] == 1, f"umap shape is {umap.shape}, but should be (n, 1, h, w)"
+        assert not torch.isnan(umap).any(), f"umap contains nan values"
         return umap
     
     

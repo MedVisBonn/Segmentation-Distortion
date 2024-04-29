@@ -163,7 +163,6 @@ def get_precision_recall_mahalanobis(
     umaps = torch.cat(umaps, dim=0).flatten().half()
     umaps = (umaps - umaps.min()) / (umaps.max() - umaps.min())
     errmaps = torch.cat(errmaps, dim=0).flatten().to(torch.uint8)
-
     # in case of manual threshold selection
     if n_taus != 'auto':
         # taus = np.quantile(umaps, torch.linspace(0, 1, n_taus)**(1/16)).tolist()
@@ -179,7 +178,6 @@ def get_precision_recall_mahalanobis(
         pr = tuple(map(lambda x: x.cpu(), pr))
 
     pr_auc = auc(pr[1], pr[0])
-
     # subset precision/recall to 100 points for plotting
     # we find indices along the x axis (recall) such that they
     # have roughly equal distance to each other and select the 
