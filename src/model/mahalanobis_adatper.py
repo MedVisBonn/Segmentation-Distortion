@@ -91,6 +91,7 @@ class PoolingMahalanobisDetector(nn.Module):
         pool: str = 'avg2d',
         sigma_algorithm: str = 'default',
         transform: bool = False,
+        dist_fn: str = 'squared_mahalanobis',
         lr: float = 1e-3,
         device: str  = 'cuda:0'
     ):
@@ -101,6 +102,7 @@ class PoolingMahalanobisDetector(nn.Module):
         self.sigma_algorithm = sigma_algorithm
         # self.hook_fn = self.register_forward_pre_hook if hook_fn == 'pre' else self.register_forward_hook
         self.transform = transform
+        self.dist_fn = dist_fn
         self.lr = lr
         self.device = device
         # other attributes
@@ -116,6 +118,11 @@ class PoolingMahalanobisDetector(nn.Module):
                 kernel_size=(2,2,2),
                 stride=(2,2,2)
             )
+        elif self.pool == 'none':
+            self._pool = None
+        else:
+            raise NotImplementedError('Choose from: avg2d, avg3d, none')
+        
         self.to(device)
 
 
@@ -136,8 +143,7 @@ class PoolingMahalanobisDetector(nn.Module):
 
     @torch.no_grad()
     def _collect(self, x: Tensor) -> None:
-        # reduces dimensionality, moves to cpu and stores
-        
+        # reduces dimensionality as per self._pool, moves to cpu and stores
         x = self._reduce(x.detach()).cpu()
         self.training_representations.append(x)
 
@@ -169,6 +175,8 @@ class PoolingMahalanobisDetector(nn.Module):
             )
         
         elif self.sigma_algorithm == 'default':
+            assert self.pool in ['avg2d', 'avg3d'], 'default only works with actual pooling, otherwise calculation sigma is infeasible'
+
             self.register_buffer(
                 'sigma',
                 torch.cov(self.training_representations.squeeze(1).T)
@@ -179,6 +187,8 @@ class PoolingMahalanobisDetector(nn.Module):
             )
 
         elif self.sigma_algorithm == 'ledoitWolf':
+            assert self.pool in ['avg2d', 'avg3d'], 'default only works with actual pooling, otherwise calculation sigma is infeasible'
+
             self.register_buffer(
                 'sigma', 
                 torch.from_numpy(
@@ -203,11 +213,19 @@ class PoolingMahalanobisDetector(nn.Module):
         x_centered = x_reduced - self.mu
         if self.sigma_algorithm == 'diagonal':
             dist = x_centered**2 * self.sigma_inv
-            dist = dist.sum(1)
+            dist = dist.sum((1,2))
         else:
             dist = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
+            
+        assert len(dist.shape) == 1, 'distances should be 1D over batch dimension'
+        assert dist.shape[0] == x.shape[0], 'distance and input should have same batch size'
 
-        return torch.sqrt(dist)
+        if self.dist_fn == 'squared_mahalanobis':
+            return dist
+        elif self.dist_fn == 'mahalanobis':
+            return torch.sqrt(dist)
+        else:
+            raise NotImplementedError('Choose from: squared_mahalanobis, mahalanobis')
 
 
     ### public methods ###
@@ -227,8 +245,7 @@ class PoolingMahalanobisDetector(nn.Module):
             self.batch_distances = self._distance(x).detach().view(-1)
             if self.transform:
                 x = x.clone().detach().requires_grad_(True)
-                dist_tmp = self._distance(x)
-                dist = dist_tmp.sum()
+                dist = self._distance(x).sum()
                 dist.backward()
                 x.grad.data = torch.nan_to_num(x.grad.data, nan=0.0)
                 x.data.sub_(self.lr * x.grad.data)
