@@ -13,10 +13,12 @@ def get_pooling_mahalanobis_detector(
     unet: nn.Module = None,
     pool: str = 'avg2d',
     sigma_algorithm: str = 'default',
+    dist_fn: str = 'squared_mahalanobis',
     fit: str  = 'raw', # None, 'raw', 'augmented'
     iid_data: DataLoader = None,
     transform: bool = False,
     lr: float = 1e-3,
+    sequential: bool = False,
     device: str  = 'cuda:0',
 ): 
 
@@ -27,12 +29,15 @@ def get_pooling_mahalanobis_detector(
             pool=pool,
             sigma_algorithm=sigma_algorithm,
             transform=transform,
+            dist_fn=dist_fn,
             lr=lr,
         ) for swivel in swivels
     ]
     pooling_wrapper = PoolingMahalanobisWrapper(
         model=unet,
-        adapters=nn.ModuleList(pooling_detector)
+        adapters=nn.ModuleList(pooling_detector),
+        copy=True,
+        sequential=sequential,
     )
     pooling_wrapper.hook_adapters()
     pooling_wrapper.to(device)
@@ -90,6 +95,7 @@ class PoolingMahalanobisDetector(nn.Module):
         swivel: str,
         pool: str = 'avg2d',
         sigma_algorithm: str = 'default',
+        sigma_diag_eps: float = 2e-1,
         transform: bool = False,
         dist_fn: str = 'squared_mahalanobis',
         lr: float = 1e-3,
@@ -100,12 +106,14 @@ class PoolingMahalanobisDetector(nn.Module):
         self.swivel = swivel
         self.pool = pool
         self.sigma_algorithm = sigma_algorithm
+        self.sigma_diag_eps = sigma_diag_eps
         # self.hook_fn = self.register_forward_pre_hook if hook_fn == 'pre' else self.register_forward_hook
         self.transform = transform
         self.dist_fn = dist_fn
         self.lr = lr
         self.device = device
         # other attributes
+        self.active = True
         self.training_representations = []
         # methods
         if self.pool == 'avg2d':
@@ -169,10 +177,14 @@ class PoolingMahalanobisDetector(nn.Module):
                 'var',
                 torch.var(self.training_representations.squeeze(1), dim=0).detach()
             )
+            sigma = torch.sqrt(self.var)
+            # sigma = torch.max(sigma, torch.tensor(self.sigma_diag_eps))
             self.register_buffer(
                 'sigma_inv', 
-                1 / torch.sqrt(self.var).detach().to(self.device)
+                1 / sigma.detach().to(self.device)
             )
+
+            # self.sigma_inv = torch.max(self.sigma_inv, torch.tensor(self.sigma_diag_eps).to(self.device))
         
         elif self.sigma_algorithm == 'default':
             assert self.pool in ['avg2d', 'avg3d'], 'default only works with actual pooling, otherwise calculation sigma is infeasible'
@@ -233,25 +245,34 @@ class PoolingMahalanobisDetector(nn.Module):
     def fit(self):
         self._merge()
         self._estimate_gaussians()
-        del self.training_representations
+        # del self.training_representations
+
+
+    def on(self):
+        self.active = True
+
+
+    def off(self):
+        self.active = False
 
 
     def forward(self, x: Tensor) -> Tensor:
-        # implements identity function from a hooks perspective
-        if self.training:
-            self._collect(x)
-        
+        if self.active:
+            if self.training:
+                self._collect(x)
+            
+            else:
+                self.batch_distances = self._distance(x).detach().view(-1)
+                if self.transform:
+                    x = x.clone().detach().requires_grad_(True)
+                    dist = self._distance(x).sum()
+                    dist.backward()
+                    x.grad.data = torch.nan_to_num(x.grad.data, nan=0.0)
+                    x.data.sub_(self.lr * x.grad.data)
+                    x.grad.data.zero_()
+                    x.requires_grad = False
         else:
-            self.batch_distances = self._distance(x).detach().view(-1)
-            if self.transform:
-                x = x.clone().detach().requires_grad_(True)
-                dist = self._distance(x).sum()
-                dist.backward()
-                x.grad.data = torch.nan_to_num(x.grad.data, nan=0.0)
-                x.data.sub_(self.lr * x.grad.data)
-                x.grad.data.zero_()
-                x.requires_grad = False
-
+            pass
         return x
 
 

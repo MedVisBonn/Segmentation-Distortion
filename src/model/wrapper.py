@@ -398,10 +398,12 @@ class PoolingMahalanobisWrapper(nn.Module):
         model: nn.Module,
         adapters: nn.ModuleList,
         copy: bool = True,
+        sequential: bool = False
     ):
         super().__init__()
         self.model           = deepcopy(model) if copy else model
         self.adapters        = adapters
+        self.sequential      = sequential
         self.adapter_handles = {}
         self.model.eval()
 
@@ -448,11 +450,25 @@ class PoolingMahalanobisWrapper(nn.Module):
             adapter.lr = lr
 
 
+    def turn_off_all_adapters(self):
+        for adapter in self.adapters:
+            adapter.off()
+
+
     def forward(
         self, 
         x: Tensor
     ) -> Tensor:
-        return self.model(x)
+        if self.sequential:
+            out = []
+            for adapter in self.adapters:
+                self.turn_off_all_adapters()
+                adapter.on()
+                out.append(self.model(x))
+            return out
+
+        else:
+            return self.model(x)
     
 
 class BatchNormMahalanobisWrapper(nn.Module):
