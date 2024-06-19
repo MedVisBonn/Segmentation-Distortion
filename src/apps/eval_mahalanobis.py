@@ -79,18 +79,28 @@ def main(
         num_workers=4
     )
 
-    if cfg.run.detector == 'pooling':
+    if cfg.eval.params.detector == 'pooling':
+        if cfg.run.swivels == 'all':
+            swivels = [layer[0] for layer in unet.named_modules() if 'bn' in layer[0]][:2]
+        elif cfg.run.swivels == 'default':
+            swivels = ['up3.0.conv_path.0.bn'] if cfg.unet[cfg.run.data_key].arch == 'default' else None
+        else:
+            raise ValueError(f'Unknown swivel option: {cfg.run.swivels}. Choose from [all, default]')
+        
         mahalanobis_detector = get_pooling_mahalanobis_detector(
-            swivels=['up3.0.conv_path.0.bn'] if cfg.unet[cfg.run.data_key].arch == 'default' else None,
+            swivels=swivels,
             unet=unet,
+            pool=cfg.eval.params.pool,
             sigma_algorithm=cfg.eval.params.sigma_algorithm,
+            dist_fn=cfg.eval.params.dist_fn,
             fit='raw',
             iid_data=iid_data,
             transform=True,
             lr=cfg.eval.params.lr,
             device='cuda:0'
         )
-    elif cfg.run.detector == 'batchnorm':
+
+    elif cfg.eval.params.detector == 'batchnorm':
         if cfg.run.swivels == 'all':
             swivels = [layer[0] for layer in unet.named_modules() if 'bn' in layer[0]]
         elif cfg.run.swivels == 'default':
@@ -106,8 +116,9 @@ def main(
             lr=cfg.eval.params.lr,
             device='cuda:0'
         )
+
     else:
-        raise ValueError(f'Unknown detector: {cfg.run.detector}. Choose from [pooling, batchnorm]')
+        raise ValueError(f'Unknown detector: {cfg.eval.params.detector}. Choose from [pooling, batchnorm]')
 
     dfs_auroc = []
     dfs_eaurc = []
@@ -135,7 +146,7 @@ def main(
                         'data_key': cfg.run.data_key,
                         'run': cfg.run.iteration,
                         'domain': data_key,
-                        'method': f'Mahalanobis_{cfg.run.detector}_{cfg.eval.logging.postfix}',
+                        'method': f'Mahalanobis_{cfg.eval.params.detector}_{cfg.eval.logging.postfix}',
                         'unet': cfg.unet[cfg.run.data_key].pre,
                     }
                 )
@@ -144,7 +155,7 @@ def main(
             save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
             save_name = f'auroc_{cfg.run.data_key}_' + \
                 f'mahalanobis_' + \
-                f'{cfg.run.detector}_' + \
+                f'{cfg.eval.params.detector}_' + \
                 f'{cfg.eval.logging.postfix}_' + \
                 f'{cfg.unet[cfg.run.data_key].pre}_' + \
                 f'{cfg.run.iteration}.csv'
@@ -166,7 +177,7 @@ def main(
             ret = get_eaurc_mahalanobis_propagated(
                 wrapper=mahalanobis_detector,
                 data=data[data_key],
-                umap='cross_entropy',
+                umap=cfg.eval.params.umap,
                 net_out=cfg.run.data_key,
                 device='cuda:0'
             )
@@ -183,7 +194,7 @@ def main(
                         'data_key': cfg.run.data_key,
                         'run': cfg.run.iteration,
                         'domain': data_key,
-                        'method': f'Mahalanobis_{cfg.run.detector}_{cfg.eval.logging.postfix}',
+                        'method': f'Mahalanobis_{cfg.eval.params.detector}_{cfg.eval.logging.postfix}',
                         'unet': cfg.unet[cfg.run.data_key].pre,
                     }
                 )
@@ -192,7 +203,7 @@ def main(
             save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
             save_name = f'eaurc_{cfg.run.data_key}_' + \
                 f'mahalanobis_' + \
-                f'{cfg.run.detector}_' + \
+                f'{cfg.eval.params.detector}_' + \
                 f'{cfg.eval.logging.postfix}_' + \
                 f'{cfg.unet[cfg.run.data_key].pre}_' + \
                 f'{cfg.run.iteration}.csv'
@@ -209,7 +220,7 @@ def main(
                 model=mahalanobis_detector,
                 dataset=data[data_key],
                 net_out=cfg.run.data_key,
-                umap='cross_entropy',
+                umap=cfg.eval.params.umap,
                 n_taus='auto',
                 device=['cuda:0', 'cuda:0']
             )
@@ -224,7 +235,7 @@ def main(
                         'data_key': cfg.run.data_key,
                         'run': cfg.run.iteration,
                         'domain': data_key,
-                        'method': f'Mahalanobis_{cfg.run.detector}_{cfg.eval.logging.postfix}',
+                        'method': f'Mahalanobis_{cfg.eval.params.detector}_{cfg.eval.logging.postfix}',
                         'unet': cfg.unet[cfg.run.data_key].pre,
                     }
                 )
@@ -233,7 +244,7 @@ def main(
             save_dir = f'{cfg.fs.repo_root}results-tmp/dae-data/'
             save_name = f'{cfg.run.data_key}_' + \
                 f'pr_mahalanobis_' + \
-                f'{cfg.run.detector}_' + \
+                f'{cfg.eval.params.detector}_' + \
                 f'{cfg.eval.logging.postfix}_' + \
                 f'{cfg.unet[cfg.run.data_key].pre}_' + \
                 f'{cfg.run.iteration}.csv'

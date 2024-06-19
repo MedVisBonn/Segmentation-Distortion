@@ -8,10 +8,18 @@ DEBUG=$2
 ## Globals
 TESTING='all'
 # TESTING='['A']'
+
 DETECTOR='pooling'
-LR=8
-SWIVELS='default'
-POSTFIX='up3_propagated_8e1'
+POOL='none'
+SIGMA_ALGO='diagonal'
+DIST_FN='squared_mahalanobis'
+# UMAP='diff_grad'
+UMAP='diff_grad'
+
+LR=2e-1
+SWIVELS='all'
+# POSTFIX='all_propagated_perpixel_diffgrad'
+POSTFIX='perpixel_squared-mahalanobis'
 
 
 # for UNET_NAME in 'default-8' 'monai-8-4-4' 'monai-16-4-4' 'default-16' 'monai-32-4-4' 'monai-64-4-4'; do
@@ -27,7 +35,6 @@ for UNET_NAME in 'default-8' ; do
             -cn basic_config_venusberg \
             +run.iteration=0 \
             +run.data_key="$DATA_KEY" \
-            +run.detector="$DETECTOR" \
             +run.swivels="$SWIVELS" \
             ++unet."$DATA_KEY".pre="$UNET_NAME" \
             ++unet."$DATA_KEY".arch="$UNET_ARCH" \
@@ -37,8 +44,12 @@ for UNET_NAME in 'default-8' ; do
             ++debug="$DEBUG" \
             +eval=mahalanobis_config \
             ++eval.logging.postfix="$POSTFIX" \
-            ++eval.params.sigma_algorithm='default' \
+            ++eval.params.detector="$DETECTOR" \
+            ++eval.params.pool="$POOL" \
+            ++eval.params.sigma_algorithm="$SIGMA_ALGO" \
+            ++eval.params.dist_fn="$DIST_FN" \
             ++eval.params.lr="$LR" \
+            ++eval.params.umap="$UMAP" \
             ++eval.data.testing="$TESTING"
     done
 done

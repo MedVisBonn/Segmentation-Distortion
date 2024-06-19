@@ -9,6 +9,7 @@
 *.pkl
 *.pt
 *.npy
+*.png
 
 # data sets
 data

@@ -405,6 +405,7 @@ class PoolingMahalanobisWrapper(nn.Module):
         self.adapters        = adapters
         self.sequential      = sequential
         self.adapter_handles = {}
+        self.transform       = True
         self.model.eval()
 
 
@@ -441,6 +442,7 @@ class PoolingMahalanobisWrapper(nn.Module):
 
 
     def set_transform(self, transform: bool):
+        self.transform = transform
         for adapter in self.adapters:
             adapter.transform = transform
 
@@ -459,16 +461,16 @@ class PoolingMahalanobisWrapper(nn.Module):
         self, 
         x: Tensor
     ) -> Tensor:
-        if self.sequential:
+        if self.sequential and self.transform and not self.training:
             out = []
             for adapter in self.adapters:
                 self.turn_off_all_adapters()
                 adapter.on()
-                out.append(self.model(x))
+                out.append(self.model(x).detach().cpu())
             return out
 
         else:
-            return self.model(x)
+            return self.model(x).detach().cpu()
     
 
 class BatchNormMahalanobisWrapper(nn.Module):

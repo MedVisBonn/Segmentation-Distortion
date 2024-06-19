@@ -19,6 +19,7 @@ data:
 unet:
     weight_dir: "../../pre-trained/trained_UNets/"
     log_dir: '../../pre-trained/trainer_logs/'
+    transform_key: 'global_transforms'
     brain: 
         pre: 'calgary_unet'
         n_chans_in: 1

@@ -16,7 +16,7 @@ TESTING='all'
 
 ## Model params 
 DAE_RESIDUAL=true
-DAE_POSTFIX=''
+DAE_POSTFIX='_residual'
 # DAE_POSTFIX='_reconstruction'
 # DAE_POSTFIX='_denoise-only'
 # DAE_POSTFIX='_masked7-128'

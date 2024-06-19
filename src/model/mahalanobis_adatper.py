@@ -178,7 +178,7 @@ class PoolingMahalanobisDetector(nn.Module):
                 torch.var(self.training_representations.squeeze(1), dim=0).detach()
             )
             sigma = torch.sqrt(self.var)
-            # sigma = torch.max(sigma, torch.tensor(self.sigma_diag_eps))
+            sigma = torch.max(sigma, torch.tensor(self.sigma_diag_eps))
             self.register_buffer(
                 'sigma_inv', 
                 1 / sigma.detach().to(self.device)

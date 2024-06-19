@@ -1,7 +1,11 @@
 
 name: mahalanobis
 params:
-  sigma_algorithm: default
+  detector: pooling
+  sigma_algorithm: diagonal
+  dist_fn: squared_mahalanobis
+  pool: none
+  umap: diff_grad
 data:
   training: true
   validation: true
