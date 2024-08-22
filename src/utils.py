@@ -117,7 +117,11 @@ class UMapGenerator(nn.Module):
         self.mse     = nn.MSELoss(reduction='none')
     
     @torch.no_grad()
-    def forward(self, x: Tensor, batch_size: int = 1) -> Tensor:
+    def forward(
+        self, 
+        x: Tensor, 
+        batch_size: int = 1
+    ) -> Tensor:
         
         if self.method == 'none':
             return None
@@ -184,8 +188,11 @@ class UMapGenerator(nn.Module):
             predicted_class_prob, index_of_class = output_prob.max(dim=1, keepdim=True)
             diff_to_pred = predicted_class_prob - output_prob
             diff_to_pred_augmented = torch.gather(output_augmented_prob, 1, index_of_class) - output_augmented_prob
-            umap = (diff_to_pred - diff_to_pred_augmented) / torch.max(diff_to_pred, torch.ones_like(diff_to_pred) * 1e7)
+            umap = (diff_to_pred - diff_to_pred_augmented) / (diff_to_pred + 1e-9) #torch.max(diff_to_pred, torch.ones_like(diff_to_pred) * 1e-7)
+            umap[diff_to_pred <= 0] = 0
+            # umap[umap < 0] = 0
             umap = torch.amax(umap, dim=1, keepdim=True)
+            # print(umap.min())
         
         #################################
         ### experimental / M&M only   ###

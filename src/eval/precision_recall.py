@@ -66,7 +66,7 @@ def get_precision_recall(
         umaps.append(umap_generator(output, batch_size=batch_size).cpu())
         errmaps.append(errmap.cpu())
 
-    umaps = torch.cat(umaps, dim=0).flatten().half()
+    umaps = torch.cat(umaps, dim=0).flatten() #.half()
     umaps = (umaps - umaps.min()) / (umaps.max() - umaps.min())
     errmaps = torch.cat(errmaps, dim=0).flatten().to(torch.uint8)
 
@@ -139,7 +139,7 @@ def get_precision_recall_mahalanobis(
     for _, batch in enumerate(dataloader):
 
         input_ = batch['input'].to(device[0])
-        gt = batch['target'].to(device[0])
+        gt = batch['target']# .to(device[0])
         gt[gt == -1] = 0
         model.set_transform(False)
         output_original = model(input_)
@@ -160,8 +160,14 @@ def get_precision_recall_mahalanobis(
         )
         errmaps.append(errmap.cpu())
 
-    umaps = torch.cat(umaps, dim=0).flatten().half()
+    umaps = torch.cat(umaps, dim=0).flatten() #.half()
+    # umaps.clamp_(0, 1)
+    # print('a', umaps.min(), umaps.max(), umaps.mean())
     umaps = (umaps - umaps.min()) / (umaps.max() - umaps.min())
+    # print('b', umaps.min(), umaps.max(), umaps.mean())
+    # umaps = umaps ** (0.25)
+    # print('c', umaps.min(), umaps.max(), umaps.mean())
+
     errmaps = torch.cat(errmaps, dim=0).flatten().to(torch.uint8)
     # in case of manual threshold selection
     if n_taus != 'auto':

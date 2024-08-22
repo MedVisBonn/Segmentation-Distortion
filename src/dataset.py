@@ -244,7 +244,12 @@ class CalgaryCampinasDataset(Dataset):
         data = self.crop(data)
         labels = self.crop(labels)
 
-        return {"input": data, "target": labels, "voxel_dim": voxel_dim}
+        return {
+            "input": data, 
+            "target": labels, 
+            "voxel_dim": voxel_dim,
+            "index": idx
+        }
 
 
 class ACDCDataset(Dataset):
@@ -316,6 +321,7 @@ class ACDCDataset(Dataset):
             "input": self.input[idx],
             "target": self.target[idx],
             "voxel_dim": torch.tensor([1.0, 1.0, 1.0]),
+            "index": idx
         }
 
 
@@ -427,4 +433,5 @@ class MNMDataset(Dataset):
             "input": self.input[idx],
             "target": self.target[idx],
             "voxel_dim": torch.tensor([1.0, 1.0, 1.0]),
+            "index": idx
         }

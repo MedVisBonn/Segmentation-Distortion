@@ -155,7 +155,8 @@ def get_eaurc_mahalanobis_propagated(
     for batch in loader:
         # grab data
         input_ = batch['input'].to(device)
-        target = batch['target'].to(device).long()
+        target = batch['target'].long()
+
         n_empty = (target>0).sum((1,2,3))==0
         n = input_.shape[0]
         target[target == -1] = 0
@@ -169,6 +170,7 @@ def get_eaurc_mahalanobis_propagated(
             segmap = (torch.sigmoid(output_original) > 0.5) * 1
         elif net_out == 'heart':
             segmap = torch.argmax(output_original, dim=1, keepdims=True)
+
         # collect risk and score
         # print(segmap.shape, torch.unique(segmap), target.shape, target.unique())
         risk.append(
