@@ -1,0 +1,5 @@
+
+
+* only on slices containing foreground
+* combining by averaging
+* clipping at 99% quantile results in non-smooth PR curves, omitted for now
