@@ -96,6 +96,7 @@ class PoolingMahalanobisDetector(nn.Module):
         pool: str = 'avg2d',
         sigma_algorithm: str = 'default',
         sigma_diag_eps: float = 2e-1,
+        collect_mode: str = 'train_data',
         transform: bool = False,
         dist_fn: str = 'squared_mahalanobis',
         lr: float = 1e-3,
@@ -107,6 +108,7 @@ class PoolingMahalanobisDetector(nn.Module):
         self.pool = pool
         self.sigma_algorithm = sigma_algorithm
         self.sigma_diag_eps = sigma_diag_eps
+        self.collect_mode = collect_mode
         # self.hook_fn = self.register_forward_pre_hook if hook_fn == 'pre' else self.register_forward_hook
         self.transform = transform
         self.dist_fn = dist_fn
@@ -115,6 +117,7 @@ class PoolingMahalanobisDetector(nn.Module):
         # other attributes
         self.active = True
         self.training_representations = []
+        self.validation_distances = []
         # methods
         if self.pool == 'avg2d':
             self._pool = nn.AvgPool2d(
@@ -154,6 +157,13 @@ class PoolingMahalanobisDetector(nn.Module):
         # reduces dimensionality as per self._pool, moves to cpu and stores
         x = self._reduce(x.detach()).cpu()
         self.training_representations.append(x)
+
+
+    @torch.no_grad()
+    def _collect_validation_distances(self, x: Tensor) -> None:
+        # calculate distances for validation data and store
+        x = self._distance(x).detach().cpu()
+        self.validation_distances.append(x)
 
 
     @torch.no_grad()
@@ -218,7 +228,6 @@ class PoolingMahalanobisDetector(nn.Module):
             raise NotImplementedError('Choose from: lediotWolf, diagonal, default')
 
 
-
     def _distance(self, x: Tensor) -> Tensor:
         assert self.sigma_inv is not None, 'fit the model first'
         x_reduced  = self._reduce(x)
@@ -228,7 +237,8 @@ class PoolingMahalanobisDetector(nn.Module):
             dist = dist.sum((1,2))
         else:
             dist = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
-            
+            dist = dist.view(len(dist,))
+
         assert len(dist.shape) == 1, 'distances should be 1D over batch dimension'
         assert dist.shape[0] == x.shape[0], 'distance and input should have same batch size'
 
@@ -248,6 +258,21 @@ class PoolingMahalanobisDetector(nn.Module):
         # del self.training_representations
 
 
+    @torch.no_grad()
+    def find_threshold(self, q=0.95):
+        # find q-percentile of distances for validation data
+        # and save as threshold
+        self.threshold = torch.quantile(
+            torch.cat(
+                self.validation_distances,
+                dim=0
+            ),
+            q
+        )
+        # del self.validation_distances
+        self.validation_distances = []
+
+
     def on(self):
         self.active = True
 
@@ -259,18 +284,26 @@ class PoolingMahalanobisDetector(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         if self.active:
             if self.training:
-                self._collect(x)
+                if self.collect_mode == 'train_data':
+                    self._collect(x)
+                elif self.collect_mode == 'validation_data':
+                    self._collect_validation_distances(x)
             
             else:
-                self.batch_distances = self._distance(x).detach().view(-1)
+                self.ood_pred = self._distance(x.detach()) > self.threshold
+
                 if self.transform:
-                    x = x.clone().detach().requires_grad_(True)
-                    dist = self._distance(x).sum()
-                    dist.backward()
-                    x.grad.data = torch.nan_to_num(x.grad.data, nan=0.0)
-                    x.data.sub_(self.lr * x.grad.data)
-                    x.grad.data.zero_()
-                    x.requires_grad = False
+                    self.transform_loss = (self._distance(x) * self.ood_pred).sum()
+
+                # self.batch_distances = self._distance(x).detach().view(-1)
+                # if self.transform:
+                #     x = x.clone().detach().requires_grad_(True)
+                #     dist = self._distance(x).sum()
+                #     dist.backward()
+                #     x.grad.data = torch.nan_to_num(x.grad.data, nan=0.0)
+                #     x.data.sub_(self.lr * x.grad.data)
+                #     x.grad.data.zero_()
+                #     x.requires_grad = False
         else:
             pass
         return x

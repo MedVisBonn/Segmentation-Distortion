@@ -447,6 +447,22 @@ class PoolingMahalanobisWrapper(nn.Module):
             adapter.transform = transform
 
 
+    def set_collect_mode(self, collect_mode: str):
+        self.collect_mode = collect_mode
+        for adapter in self.adapters:
+            adapter.collect_mode = collect_mode
+
+
+    def set_ood_detection(self, ood_detection: bool):
+        for adapter in self.adapters:
+            adapter.ood_detection = ood_detection
+            
+
+    def find_threshold(self, q=0.95):
+        for adapter in self.adapters:
+            adapter.find_threshold(q=q)
+
+
     def set_lr(self, lr: float):
         for adapter in self.adapters:
             adapter.lr = lr
