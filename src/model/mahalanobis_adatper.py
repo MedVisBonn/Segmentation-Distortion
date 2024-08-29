@@ -228,7 +228,7 @@ class PoolingMahalanobisDetector(nn.Module):
             dist = dist.sum((1,2))
         else:
             dist = x_centered @ self.sigma_inv @ x_centered.permute(0,2,1)
-            
+        dist = dist.view((dist.shape[0], ))
         assert len(dist.shape) == 1, 'distances should be 1D over batch dimension'
         assert dist.shape[0] == x.shape[0], 'distance and input should have same batch size'
 
