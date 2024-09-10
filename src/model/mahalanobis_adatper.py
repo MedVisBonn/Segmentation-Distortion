@@ -129,7 +129,7 @@ class PoolingMahalanobisDetector(nn.Module):
                 kernel_size=(2,2,2),
                 stride=(2,2,2)
             )
-        elif self.pool == 'none':
+        elif self.pool == 'none' or self.pool == 'channel_max':
             self._pool = None
         else:
             raise NotImplementedError('Choose from: avg2d, avg3d, none')
@@ -145,6 +145,8 @@ class PoolingMahalanobisDetector(nn.Module):
             while torch.prod(torch.tensor(x.shape[1:])) > 1e4:
                 x = self._pool(x)
             x = self._pool(x)
+        elif self.pool == 'channel_max':
+            x = (x**2).amax(dim=1, keepdim=True)
         elif self.pool == 'none':
             pass
         # reshape to (batch_size, 1, n_features)
@@ -197,7 +199,7 @@ class PoolingMahalanobisDetector(nn.Module):
             # self.sigma_inv = torch.max(self.sigma_inv, torch.tensor(self.sigma_diag_eps).to(self.device))
         
         elif self.sigma_algorithm == 'default':
-            assert self.pool in ['avg2d', 'avg3d'], 'default only works with actual pooling, otherwise calculation sigma is infeasible'
+            assert self.pool in ['avg2d', 'avg3d', 'channel_max'], 'default only works with actual pooling, otherwise calculation sigma is infeasible'
 
             self.register_buffer(
                 'sigma',

@@ -580,6 +580,9 @@ class Transforms(object):
                     self.transforms['global_transforms']
                 )
             ))
+        
+        else:
+            raise ValueError(f"Unknown transform category {arg}. Must be one of {self.transforms.keys()}")
 
 
 
