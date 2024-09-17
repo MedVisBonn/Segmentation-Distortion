@@ -543,6 +543,53 @@ def load_state_dict_for_modulelists(model, state_dict):
         sys.exit()
 
     return model
+
+
+
+def sum_model_parameters(model: nn.Module) -> int:
+    """
+    Sum up the number of parameters in a model.
+    """
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+
+def find_shapes_for_swivels(
+    model: nn.Module, 
+    swivels: List[str],
+    input_shape: Tuple[int, int, int, int] = (1, 1, 256, 256)
+) -> Dict[str, List[int]]:
+    # Create a dictionary to store the output shapes
+    model = deepcopy(model).cuda()
+    output_shapes = {}
+
+    # Get hook function to capture and print output shapes for swivel
+    def get_hook_fn(name):
+        def hook_fn(module, input, output):
+            output_shapes[name] = list(output.shape)
+        return hook_fn
+
+    # Attach hooks to all layers
+    hooks = []
+    for layer_id in swivels:
+        layer   = model.get_submodule(layer_id)
+        hook_fn = get_hook_fn(layer_id)
+        hook    = layer.register_forward_hook(hook_fn)
+        hooks.append(hook)
+
+    # Run a sample input through the model
+    x = torch.randn(input_shape).cuda()  # Batch size 1, 3 channels, 32x32 image
+    _ = model(x)
+
+    # remove hooks and model
+    for hook in hooks:
+        hook.remove()
+
+    del model
+
+    return output_shapes
+
+
 #from trainer import Trainer
 
 

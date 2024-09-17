@@ -392,6 +392,9 @@ class ModelAdapter(nn.Module):
     
 
 
+
+
+
 class PoolingMahalanobisWrapper(nn.Module):
     def __init__(
         self,
