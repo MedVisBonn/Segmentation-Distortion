@@ -113,6 +113,20 @@ def get_score_prediction_modification(
     return wrapper
 
 
+class MetaPredictor(nn.Module):
+    def __init__(
+        self, 
+        input_dim, 
+        output_dim
+    ):
+        super(MetaPredictor, self).__init__()
+        self.linear = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        output = self.linear(x)
+        return output
+
+
 
 class ScorePredictor(nn.Module):
     """
@@ -142,6 +156,26 @@ class ScorePredictor(nn.Module):
             out_channels=input_size[1] // 8, 
             kernel_size=1
         )
+
+        self.conv2x2_1 = nn.Conv2d(
+            in_channels=input_size[1] // 8,
+            out_channels=input_size[1] // 8,
+            kernel_size=3,
+            stride=1,
+            padding=1
+        )
+        self.relu = nn.LeakyReLU()
+        self.bn1 = nn.BatchNorm2d(input_size[1] // 8)
+
+        self.conv2x2_2 = nn.Conv2d(
+            in_channels=input_size[1] // 8,
+            out_channels=input_size[1] // 8,
+            kernel_size=3,
+            stride=1,
+            padding=1
+        )
+        self.relu = nn.LeakyReLU()
+        self.bn2 = nn.BatchNorm2d(input_size[1] // 8)
         
         # Activation, Norm, Dropout
         self.activation1 = nn.LeakyReLU()  # You can also use other activations like Swish or LeakyReLU
@@ -162,6 +196,14 @@ class ScorePredictor(nn.Module):
     def forward(self, x):
         # Pass through 1x1 convolution, activation, normalization, and dropout
         x = self.conv1x1(x)
+
+        x = self.relu(x)
+        x = self.bn1(x)
+        x = self.conv2x2_1(x)
+        x = self.relu(x)
+        x = self.bn2(x)
+        x = self.conv2x2_2(x)
+
         x = self.activation1(x)
         x = self.norm1(x)
         x = self.dropout1(x)
@@ -244,7 +286,6 @@ class ScorePredictionAdapter(nn.Module):
             pass
         return x
     
-
 
 class ScorePredictionWrapper(nn.Module):
     def __init__(

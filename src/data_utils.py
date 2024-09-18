@@ -53,7 +53,7 @@ from batchgenerators.transforms.abstract_transforms import (
     AbstractTransform
 )
 from batchgenerators.dataloading.single_threaded_augmenter import SingleThreadedAugmenter
-from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
+# from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
 from batchgenerators.dataloading.multi_threaded_augmenter import producer, results_loop
 
 from dataset import *
@@ -280,7 +280,7 @@ def get_heart_train_loader(
     
     val_set = ACDCDataset(
         data="val",
-        debug=cfg['debug'],
+        debug=cfg.debug,
         root=cfg.fs.root,
         folder=cfg.data.heart.acdc.data_path
     )
