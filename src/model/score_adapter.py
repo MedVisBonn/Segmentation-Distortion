@@ -25,13 +25,13 @@ from utils import find_shapes_for_swivels
 
 
 def fit_score_prediction_modification(
-    wrapper: nn.Module, 
+    wrapper: nn.Module,
     dataloader: DataLoader,
     score: Callable = dice,
     loss_fn: Callable = nn.MSELoss(reduction='none'),
-    lr: float = 1e-4,
-    epochs: int = 10,
-    device: str = 'cuda:0'   
+    lr: float = 1e-6,
+    epochs: int = 2500,
+    device: str = 'cuda:0'
 ):
     wrapper.freeze_normalization_layers()
     wrapper.adapters.train()
@@ -47,7 +47,7 @@ def fit_score_prediction_modification(
         target = batch['target'].long().to(device)
         target[target == -1] = 0
         logits = wrapper(input, target)
-        dsc_per_adapter_and_class = wrapper.dsc_per_adapter_and_class
+        prediction = wrapper.prediction
         
         preds = argmax(logits, dim=1, keepdim=True)
         DSCs  = stack([
@@ -58,11 +58,11 @@ def fit_score_prediction_modification(
                     zero_division=1,
                     average='none'
                 ) for s,t in zip(preds, target)
-            ]).unsqueeze(1).repeat(1, dsc_per_adapter_and_class.shape[1], 1).detach()
+            ]).detach()
         
         DSCs.nan_to_num_(0)
-        loss = loss_fn(dsc_per_adapter_and_class, DSCs)
-        loss_aggregated = loss.sum((1,2)).mean()
+        loss = loss_fn(prediction, DSCs)
+        loss_aggregated = loss.sum(1).mean()
         loss_aggregated.backward()
         optimizer.step()
 
@@ -79,12 +79,19 @@ def fit_score_prediction_modification(
 def get_score_prediction_modification(
     swivels: List[str],
     unet: nn.Module,
-    train_lr: float = 1e-3,
+    adapter_output_dim: int = 16,
     transform: bool = False,
     lr: float = 1e-3,
     return_state_dict: bool = False,
     device: str = 'cuda:0'
 ):
+    
+    # init prediction head
+    prediction_head = PredictionHead(
+        input_dim=len(swivels) * adapter_output_dim,
+        output_dim=4
+    )
+
     output_shapes = find_shapes_for_swivels(unet, swivels)
     # init detectors with corresponding predictors
     score_detectors = [
@@ -92,7 +99,7 @@ def get_score_prediction_modification(
             swivel=swivel,
             predictor=ScorePredictor(
                 input_size=output_shapes[swivel],
-                output_dim=4
+                output_dim=adapter_output_dim
             ),
             lr = lr,
             transform = transform,
@@ -101,6 +108,7 @@ def get_score_prediction_modification(
     # wrap the model with the detectors
     wrapper = ScorePredictionWrapper(
         model=unet,
+        prediction_head=prediction_head,
         adapters=nn.ModuleList(score_detectors),
         copy=True
     )
@@ -113,18 +121,48 @@ def get_score_prediction_modification(
     return wrapper
 
 
-class MetaPredictor(nn.Module):
+
+
+class PredictionHead(nn.Module):
     def __init__(
-        self, 
-        input_dim, 
-        output_dim
-    ):
-        super(MetaPredictor, self).__init__()
-        self.linear = nn.Linear(input_dim, output_dim)
+            self, 
+            input_dim, 
+            output_dim
+        ):
+        super(PredictionHead, self).__init__()
+        hidden_dim = input_dim // 4
+        # Define the first fully connected layer
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        # Define Layer Normalization for the first layer
+        self.ln1 = nn.LayerNorm(hidden_dim)
+        # Leaky ReLU activation function for the first layer
+        self.leaky_relu1 = nn.LeakyReLU(negative_slope=0.01)
+        
+        # Define the second fully connected layer
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        # Define Layer Normalization for the second layer
+        self.ln2 = nn.LayerNorm(hidden_dim)
+        # Leaky ReLU activation function for the second layer
+        self.leaky_relu2 = nn.LeakyReLU(negative_slope=0.01)
+        
+        # Define the third fully connected layer (output layer)
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
-        output = self.linear(x)
-        return output
+        # Forward pass through the first layer, normalization, and activation
+        x = self.fc1(x)
+        x = self.ln1(x)
+        x = self.leaky_relu1(x)
+        
+        # Forward pass through the second layer, normalization, and activation
+        x = self.fc2(x)
+        x = self.ln2(x)
+        x = self.leaky_relu2(x)
+        
+        # Output layer (no activation here if it's a regression task or depending on the task)
+        x = self.fc3(x)
+        
+        return x
 
 
 
@@ -218,7 +256,7 @@ class ScorePredictor(nn.Module):
         
         # Final output layer
         output = self.fc2(x)
-        return sigmoid(output)
+        return output #sigmoid(output)
 
 
 
@@ -285,17 +323,20 @@ class ScorePredictionAdapter(nn.Module):
         else:
             pass
         return x
-    
+
+
 
 class ScorePredictionWrapper(nn.Module):
     def __init__(
         self,
         model: nn.Module,
+        prediction_head: nn.Module,
         adapters: nn.ModuleList,
         copy: bool = True,
     ):
         super().__init__()
         self.model           = deepcopy(model) if copy else model
+        self.prediction_head = prediction_head
         self.adapters        = adapters
         self.adapter_handles = {}
         self.transform       = False
@@ -369,13 +410,14 @@ class ScorePredictionWrapper(nn.Module):
     def forward(
         self,
         x: Tensor,
-        target: Tensor
     ) -> Tensor:
     
         logits = self.model(x).detach()
         
-        self.dsc_per_adapter_and_class = stack([
+        self.output_per_adapter = stack([
             adapter.score for adapter in self.adapters
         ], dim=1)
+
+        self.prediction = self.prediction_head(self.output_per_adapter.flatten(1))
 
         return logits
