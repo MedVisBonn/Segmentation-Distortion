@@ -80,6 +80,8 @@ def get_score_prediction_modification(
     swivels: List[str],
     unet: nn.Module,
     adapter_output_dim: int = 16,
+    attach_prediction_head: bool = True,
+    prediction_head_output_dim: int = 4,
     transform: bool = False,
     lr: float = 1e-3,
     return_state_dict: bool = False,
@@ -87,10 +89,13 @@ def get_score_prediction_modification(
 ):
     
     # init prediction head
-    prediction_head = PredictionHead(
-        input_dim=len(swivels) * adapter_output_dim,
-        output_dim=4
-    )
+    if attach_prediction_head:
+        prediction_head = PredictionHead(
+            input_dim=len(swivels) * adapter_output_dim,
+            output_dim=prediction_head_output_dim
+        )
+    else:
+        prediction_head = None
 
     output_shapes = find_shapes_for_swivels(unet, swivels)
     # init detectors with corresponding predictors
@@ -418,6 +423,7 @@ class ScorePredictionWrapper(nn.Module):
             adapter.score for adapter in self.adapters
         ], dim=1)
 
-        self.prediction = self.prediction_head(self.output_per_adapter.flatten(1))
+        if self.prediction_head is not None:
+            self.prediction = self.prediction_head(self.output_per_adapter.flatten(1))
 
         return logits
