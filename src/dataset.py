@@ -9,8 +9,9 @@ Authors: Rasha Sheikh, Jonathan Lennartz
 
 # - standard packages
 import os
-
+from pathlib import Path
 # - third party packages
+import pandas as pd
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -28,6 +29,197 @@ from nnunet.training.dataloading.dataset_loading import *
 
 # - local source
 from augment import RandAugmentWithLabels, _apply_op
+
+
+
+class PMRIDataset(Dataset):
+    """
+    Multi-site dataset for prostate MRI segmentation from:
+    https://liuquande.github.io/SAML/
+    Possible vendors:
+    - Siemens
+    - GE
+    - Philips
+    Initialization parameters:
+    - datapath -> Path to dataset directory
+    - vendor -> Vendor from possible ones to load data
+    """
+
+    _VENDORS_INFO = {
+        "RUNMC": ["A", "siemens"],
+        "BMC": ["B", "philips"],
+        "I2CVB": ["C", "siemens"],
+        "UCL": ["D", "siemens"],
+        "BIDMC": ["E", "ge"],
+        "HK": ["F", "siemens"],
+    }
+    _DS_CONFIG = {"num_classes": 2, "spatial_dims": 2, "size": (384, 384)}
+
+    def __init__(
+        self,
+        datapath: str,
+        vendor: str,
+        non_empty_target: bool = True,
+        normalize: bool = True,
+    ):
+        assert vendor in ["siemens", "ge", "philips"], "Invalid vendor"
+        self.vendor = vendor
+        self._datapath = Path(datapath).resolve()
+        self._non_empty_target = non_empty_target
+        self._normalize = normalize
+        self._load_data()
+
+
+    def _load_data(self):
+        self.input = []
+        self.target = []
+        vendor_sites = [
+            site for site, info in self._VENDORS_INFO.items() if info[-1] == self.vendor
+        ]
+        for site in vendor_sites:
+            site_path = self._datapath / site
+            for file in site_path.iterdir():
+                # Load the ones that have a segmentation associated file to them
+                if "segmentation" in file.name.lower():
+                    case = file.name[4:6]
+                    seg_name = "Segmentation" if site == "BMC" else "segmentation"
+                    case_input_path = site_path / f"Case{case}.nii.gz"
+                    case_target_path = site_path / f"Case{case}_{seg_name}.nii.gz"
+                    x = nib.load(case_input_path)
+                    y = nib.load(case_target_path)
+                    x = torch.tensor(x.get_fdata())
+                    y = torch.tensor(y.get_fdata(), dtype=torch.long)
+                    self.input.append(x)
+                    self.target.append(y)
+
+        # Concatenate / Reshape to batch first / Add channel Axis
+        self.input = torch.cat(self.input, dim=-1).moveaxis(-1, 0).unsqueeze(1)
+        self.target = torch.cat(self.target, dim=-1).moveaxis(-1, 0).unsqueeze(1)
+        # Relabel cases if there are two prostate classes (Since not all datasets distinguish between the two)
+        self.target[self.target == 2] = 1
+
+        if self._non_empty_target:
+            non_empty_slices = self.target.sum((-1, -2)) > 0
+            self.input = self.input[non_empty_slices]
+            self.target = self.target[non_empty_slices]
+
+
+        if self._normalize:
+            mean = self.input.mean()
+            std = self.input.std()
+            self.input = (self.input - mean) / std
+
+
+    def __len__(self):
+        return self.input.shape[0]
+    
+
+    def __getitem__(self, idx):
+        return {
+            "input": self.input[idx], 
+            "target": self.target[idx]
+        }
+
+
+
+class MNMV2Dataset(Dataset):
+
+    def __init__(
+        self,
+        datapath,
+        vendor,
+        binary_target: str = False,
+        non_empty_target: str = True,
+        normalize: str = True,
+        mode="vendor",
+        seed=42,
+    ):
+        assert vendor in ["siemens", "ge", "philips"], "Invalid vendor"
+        assert mode in ["vendor", "scanner"]
+        self.vendor = vendor
+        self._datapath = Path(datapath).resolve()
+        self._seed = seed
+        self._binary_target = binary_target
+        self._non_empty_target = non_empty_target
+        self._normalize = normalize
+        self._mode = mode
+        if self._mode == "scanner":
+            self.scanner = "SymphonyTim"
+
+        self._data_info = pd.read_csv(
+            self._datapath / "dataset_information.csv", index_col=0
+        )
+        self._crop = CenterCrop(256)
+        self._load_data()
+
+
+
+    def _load_data(self):
+        self.input = []
+        self.target = []
+        self.meta = []
+        for case in self._data_info.index:
+            if (
+                self._mode == "vendor"
+                and self.vendor in self._data_info.loc[case].VENDOR.lower()
+            ) or (
+                self._mode == "scanner"
+                and (
+                    (
+                        self._train_scanner
+                        and self._data_info.loc[case].SCANNER == self.scanner
+                    )
+                    or (
+                        not self._train_scanner
+                        and self._data_info.loc[case].SCANNER != self.scanner
+                    )
+                )
+            ):
+                case_path = self._datapath / "dataset" / f"{case:03d}"
+                modes = ["ES", "ED"]
+                for mode in modes:
+                    x = nib.load(case_path / f"{case:03d}_SA_{mode}.nii.gz")
+                    y = nib.load(case_path / f"{case:03d}_SA_{mode}_gt.nii.gz")
+                    x = torch.tensor(x.get_fdata()).moveaxis(-1, 0)
+                    y = torch.tensor(y.get_fdata().astype(int), dtype=torch.long).moveaxis(-1, 0)
+                    x = self._crop(x)
+                    y = self._crop(y)
+                    self.input.append(x)
+                    self.target.append(y)
+
+                if self._mode == "scanner":
+                    self.meta.append(
+                        [self._data_info.loc[case].SCANNER] * self.input[-1].shape[-1]
+                    )
+
+        self.input  = torch.cat(self.input,  dim=0)
+        self.target = torch.cat(self.target, dim=0)
+
+        if self._non_empty_target:
+            non_empty_slices = self.target.sum((-1, -2)) > 0
+            self.input = self.input[non_empty_slices]
+            self.target = self.target[non_empty_slices]
+            if self._mode == "scanner":
+                self.meta = [m for m, s in zip(self.meta, non_empty_slices) if s]
+
+        if self._binary_target:
+            self.target[self.target != 0] = 1
+
+        if self._normalize:
+            mean = self.input.mean()
+            std = self.input.std()
+            self.input = (self.input - mean) / std
+
+
+    def __len__(self):
+        return self.input.shape[0]
+
+    def __getitem__(self, idx):
+        return {
+            "input": self.input[idx], 
+            "target": self.target[idx]
+        }
+    
 
 
 class CalgaryCampinasDataset(Dataset):
