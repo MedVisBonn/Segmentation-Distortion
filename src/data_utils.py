@@ -55,8 +55,206 @@ from batchgenerators.transforms.abstract_transforms import (
 from batchgenerators.dataloading.single_threaded_augmenter import SingleThreadedAugmenter
 from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
 from batchgenerators.dataloading.multi_threaded_augmenter import producer, results_loop
+import lightning as L
 
 from dataset import *
+
+
+
+class PMRIDataModule(L.LightningDataModule):
+    
+    def __init__(
+        self,
+        data_dir: str,
+        vendor_assignment: dict[str, str],
+        batch_size: int = 32,
+    ):
+        super().__init__()
+        self.data_dir = data_dir
+        self.vendor_assignment = vendor_assignment
+        self.batch_size = batch_size
+        self.transforms = Transforms(patch_size=[384, 384])
+
+    def prepare_data(self):
+        # nothing to prepare for now. Data already downloaded
+        pass
+
+    def setup(self, stage=None):
+        if stage == 'fit':
+            pmri_full = PMRIDataset(
+                data_dir=self.data_dir,
+                vendor=self.vendor_assignment['train'],
+            )
+            self.pmri_train, self.pmri_val = pmri_full.random_split(
+                val_size=0.1,
+            )
+
+        if stage == 'test':
+            self.pmri_test = PMRIDataset(
+                data_dir=self.data_dir,
+                vendor=self.vendor_assignment['test'],
+            )
+
+        if stage == 'predict':
+            self.prmi_predict = PMRIDataset(
+                data_dir=self.data_dir,
+                vendor=self.vendor_assignment['test'],
+            )
+
+
+    def train_dataloader(self):
+        pmri_train_loader = MultiImageSingleViewDataLoader(
+            data=self.pmri_train,
+            batch_size=self.batch_size,
+            return_orig=False
+        )
+        
+        return MultiThreadedAugmenter(
+            data_loader=pmri_train_loader,
+            transform=self.transforms.get_transforms("global_transforms"),
+            num_processes=4,
+            num_cached_per_queue = 2, 
+            seeds=None
+        )
+    
+    
+    def val_dataloader(self):
+        return DataLoader(
+            self.pmri_val,
+            batch_size=self.batch_size,
+            shuffle=False,
+            drop_last=False,
+            pin_memory=True,
+            num_workers=4
+        )
+
+    
+    def test_dataloader(self):
+        return DataLoader(
+            self.pmri_test,
+            batch_size=self.batch_size,
+            shuffle=False,
+            drop_last=False,
+            pin_memory=True,
+            num_workers=4
+        )
+    
+
+    def predict_dataloader(self):
+        return DataLoader(
+            self.pmri_predict,
+            batch_size=self.batch_size,
+            shuffle=False,
+            drop_last=False,
+            pin_memory=True,
+            num_workers=4
+        )
+    
+
+
+class MNMv2DataModule(L.LightningDataModule):
+    def __init__(
+        self,
+        data_dir: str,
+        vendor_assignment: dict,
+        batch_size: int = 32,
+        binary_mask: bool = False,
+        non_empty_target: bool = True,
+    ):
+        super().__init__()
+        self.data_dir = data_dir
+        self.vendor_assignment = vendor_assignment  # Should be a dict with keys 'train', 'val', 'test'
+        self.batch_size = batch_size
+        self.binary_mask = binary_mask
+        self.non_empty_target = non_empty_target
+
+        self.transforms = Transforms(patch_size=[256, 256])  # Assuming similar transform object as PMRIDataModule
+
+
+    def prepare_data(self):
+        # Data is already prepared; nothing to do
+        pass
+
+
+    def setup(self, stage=None):
+        if stage == 'fit' or stage is None:
+            # Load full dataset for training
+            mnm_full = MNMv2Dataset(
+                data_dir=self.data_dir,
+                vendor=self.vendor_assignment.get('train'),
+                binary_target=self.binary_mask,
+                non_empty_target=self.non_empty_target,
+                normalize=True,  # Always normalizing
+            )
+            # Split using MNMv2Dataset's custom method
+            self.mnm_train, self.mnm_val = mnm_full.random_split(val_size=0.1)
+
+        if stage == 'test' or stage is None:
+            self.mnm_test = MNMv2Dataset(
+                data_dir=self.data_dir,
+                vendor=self.vendor_assignment.get('test'),
+                binary_target=self.binary_mask,
+                non_empty_target=self.non_empty_target,
+                normalize=True,
+            )
+
+        if stage == 'predict' or stage is None:
+            self.mnm_predict = MNMv2Dataset(
+                data_dir=self.data_dir,
+                vendor=self.vendor_assignment.get('predict', self.vendor_assignment.get('test')),
+                binary_target=self.binary_mask,
+                non_empty_target=self.non_empty_target,
+                normalize=True,
+            )
+
+
+    def train_dataloader(self):
+        mnm_train_loader = MultiImageSingleViewDataLoader(
+            data=self.mnm_train,
+            batch_size=self.batch_size,
+            return_orig=False
+        )
+        
+        return MultiThreadedAugmenter(
+            data_loader=mnm_train_loader,
+            transform=self.transforms.get_transforms("global_transforms"),
+            num_processes=4,
+            num_cached_per_queue=2,
+            seeds=None
+        )
+
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.mnm_val,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True,
+            drop_last=False  # Ensuring we do not drop the last batch
+        )
+
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.mnm_test,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True,
+            drop_last=False  # Ensuring we do not drop the last batch
+        )
+
+
+    def predict_dataloader(self):
+        return DataLoader(
+            self.mnm_predict,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True,
+            drop_last=False  # Ensuring we do not drop the last batch
+        )
 
 
 
@@ -307,6 +505,8 @@ def get_heart_train_loader(
     
     return train_gen, valid_gen
 
+
+
 class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
     """Single image multi view dataloader.
     
@@ -410,6 +610,7 @@ class Transforms(object):
     
     def __init__(
         self,
+        patch_size = [256, 256]
     ) -> None:
         
         io_transforms = [
@@ -458,7 +659,7 @@ class Transforms(object):
                 p_el_per_sample = 0.2, 
                 data_key = 'data', 
                 label_key = 'seg', 
-                patch_size = np.array([256, 256]), 
+                patch_size = np.array(patch_size), 
                 patch_center_dist_from_border = None, 
                 do_elastic_deform = False, 
                 alpha = (0.0, 200.0), 
@@ -677,6 +878,7 @@ def _apply_op(
     return img
 
 
+
 class RandAugmentWithLabels(torch.nn.Module):
     r"""RandAugment data augmentation method based on
     `"RandAugment: Practical automated data augmentation with a reduced search space"
@@ -809,7 +1011,7 @@ def volume_collate(batch: List[dict]) -> dict:
     return batch[0]
 
 
-        
+     
 def slice_selection(
     dataset: Dataset, 
     indices: Tensor,
@@ -861,7 +1063,7 @@ def dataset_from_indices(
         
     return CustomDataset(*data.values())
 
-from time import time
+
 
 @torch.no_grad()
 def get_subset(

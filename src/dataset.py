@@ -41,7 +41,7 @@ class PMRIDataset(Dataset):
     - GE
     - Philips
     Initialization parameters:
-    - datapath -> Path to dataset directory
+    - data_dir -> Path to dataset directory
     - vendor -> Vendor from possible ones to load data
     """
 
@@ -57,14 +57,14 @@ class PMRIDataset(Dataset):
 
     def __init__(
         self,
-        datapath: str,
+        data_dir: str,
         vendor: str,
         non_empty_target: bool = True,
         normalize: bool = True,
     ):
         assert vendor in ["siemens", "ge", "philips"], "Invalid vendor"
         self.vendor = vendor
-        self._datapath = Path(datapath).resolve()
+        self._data_dir = Path(data_dir).resolve()
         self._non_empty_target = non_empty_target
         self._normalize = normalize
         self._load_data()
@@ -77,7 +77,7 @@ class PMRIDataset(Dataset):
             site for site, info in self._VENDORS_INFO.items() if info[-1] == self.vendor
         ]
         for site in vendor_sites:
-            site_path = self._datapath / site
+            site_path = self._data_dir / site
             for file in site_path.iterdir():
                 # Load the ones that have a segmentation associated file to them
                 if "segmentation" in file.name.lower():
@@ -93,13 +93,13 @@ class PMRIDataset(Dataset):
                     self.target.append(y)
 
         # Concatenate / Reshape to batch first / Add channel Axis
-        self.input = torch.cat(self.input, dim=-1).moveaxis(-1, 0).unsqueeze(1)
+        self.input = torch.cat(self.input, dim=-1).moveaxis(-1, 0).unsqueeze(1).float()
         self.target = torch.cat(self.target, dim=-1).moveaxis(-1, 0).unsqueeze(1)
         # Relabel cases if there are two prostate classes (Since not all datasets distinguish between the two)
         self.target[self.target == 2] = 1
 
         if self._non_empty_target:
-            non_empty_slices = self.target.sum((-1, -2)) > 0
+            non_empty_slices = self.target.sum((-1, -2, -3)) > 0
             self.input = self.input[non_empty_slices]
             self.target = self.target[non_empty_slices]
 
@@ -110,6 +110,44 @@ class PMRIDataset(Dataset):
             self.input = (self.input - mean) / std
 
 
+    def random_split(
+        self,
+        val_size: float = 0.2,
+    ):
+        class PMRISubset(Dataset):
+            def __init__(
+                self,
+                input,
+                target,
+            ):
+                self.input = input
+                self.target = target
+
+            def __len__(self):
+                return self.input.shape[0]
+            
+            def __getitem__(self, idx):
+                return {
+                    "input": self.input[idx], 
+                    "target": self.target[idx]
+                }
+            
+        indices = torch.randperm(len(self.input)).tolist()
+        pmri_train = PMRISubset(
+            input=self.input[indices[int(val_size * len(self.input)):]],
+            target=self.target[indices[int(val_size * len(self.input)):]],
+        )
+
+        pmri_val = PMRISubset(
+            input=self.input[indices[:int(val_size * len(self.input))]],
+            target=self.target[indices[:int(val_size * len(self.input))]],
+        )
+
+        return pmri_train, pmri_val
+
+
+
+
     def __len__(self):
         return self.input.shape[0]
     
@@ -117,28 +155,27 @@ class PMRIDataset(Dataset):
     def __getitem__(self, idx):
         return {
             "input": self.input[idx], 
-            "target": self.target[idx]
+            "target": self.target[idx],
+            "index": idx
         }
 
 
 
-class MNMV2Dataset(Dataset):
+class MNMv2Dataset(Dataset):
 
     def __init__(
         self,
-        datapath,
+        data_dir,
         vendor,
         binary_target: str = False,
         non_empty_target: str = True,
         normalize: str = True,
         mode="vendor",
-        seed=42,
     ):
         assert vendor in ["siemens", "ge", "philips"], "Invalid vendor"
         assert mode in ["vendor", "scanner"]
         self.vendor = vendor
-        self._datapath = Path(datapath).resolve()
-        self._seed = seed
+        self._data_dir = Path(data_dir).resolve()
         self._binary_target = binary_target
         self._non_empty_target = non_empty_target
         self._normalize = normalize
@@ -147,7 +184,7 @@ class MNMV2Dataset(Dataset):
             self.scanner = "SymphonyTim"
 
         self._data_info = pd.read_csv(
-            self._datapath / "dataset_information.csv", index_col=0
+            self._data_dir / "dataset_information.csv", index_col=0
         )
         self._crop = CenterCrop(256)
         self._load_data()
@@ -175,7 +212,7 @@ class MNMV2Dataset(Dataset):
                     )
                 )
             ):
-                case_path = self._datapath / "dataset" / f"{case:03d}"
+                case_path = self._data_dir / "dataset" / f"{case:03d}"
                 modes = ["ES", "ED"]
                 for mode in modes:
                     x = nib.load(case_path / f"{case:03d}_SA_{mode}.nii.gz")
@@ -192,11 +229,11 @@ class MNMV2Dataset(Dataset):
                         [self._data_info.loc[case].SCANNER] * self.input[-1].shape[-1]
                     )
 
-        self.input  = torch.cat(self.input,  dim=0)
-        self.target = torch.cat(self.target, dim=0)
+        self.input  = torch.cat(self.input,  dim=0).unsqueeze(1).float()
+        self.target = torch.cat(self.target, dim=0).unsqueeze(1)
 
         if self._non_empty_target:
-            non_empty_slices = self.target.sum((-1, -2)) > 0
+            non_empty_slices = self.target.sum((-1, -2, -3)) > 0
             self.input = self.input[non_empty_slices]
             self.target = self.target[non_empty_slices]
             if self._mode == "scanner":
@@ -211,13 +248,50 @@ class MNMV2Dataset(Dataset):
             self.input = (self.input - mean) / std
 
 
+    def random_split(
+        self,
+        val_size: float = 0.2,
+    ):
+        class MNMv2Subset(Dataset):
+            def __init__(
+                self,
+                input,
+                target,
+            ):
+                self.input = input
+                self.target = target
+
+            def __len__(self):
+                return self.input.shape[0]
+            
+            def __getitem__(self, idx):
+                return {
+                    "input": self.input[idx], 
+                    "target": self.target[idx]
+                }
+            
+        indices = torch.randperm(len(self.input)).tolist()
+        mnmv2_train = MNMv2Subset(
+            input=self.input[indices[int(val_size * len(self.input)):]],
+            target=self.target[indices[int(val_size * len(self.input)):]],
+        )
+
+        mnmv2_val = MNMv2Subset(
+            input=self.input[indices[:int(val_size * len(self.input))]],
+            target=self.target[indices[:int(val_size * len(self.input))]],
+        )
+
+        return mnmv2_train, mnmv2_val
+
+
     def __len__(self):
         return self.input.shape[0]
 
     def __getitem__(self, idx):
         return {
             "input": self.input[idx], 
-            "target": self.target[idx]
+            "target": self.target[idx],
+            "index": idx
         }
     
 
