@@ -41,10 +41,14 @@ def get_unet(
     return_state_dict=False,
 ) -> Union[nn.Module, Tuple[nn.Module, Dict]]:
 
-    unet_cfg    = cfg.unet[cfg.run.data_key]
+    unet_cfg = cfg.unet[cfg.run.data_key]
 
     if unet_cfg.arch == 'default':
-        unet = get_default_unet_arch(cfg)
+        unet = get_default_unet_arch(
+            n_chans_in     = unet_cfg.n_chans_in,
+            n_chans_out    = unet_cfg.n_chans_out,
+            n_filters_init = unet_cfg.n_filters_init,
+        )
         if update_cfg_with_swivels:
             swivels = {
                 'shortcut0': {'channel': unet_cfg.n_filters_init * 1},
@@ -54,7 +58,14 @@ def get_unet(
             }
 
     elif unet_cfg.arch == 'monai':
-        unet = get_monai_unet_arch(cfg)
+
+        unet = get_monai_unet_arch(
+            in_channels    = unet_cfg.n_chans_in,
+            out_channels   = unet_cfg.n_chans_out,
+            n_filters_init = unet_cfg.n_filters_init,
+            depth          = unet_cfg.depth,
+            num_res_units  = unet_cfg.num_res_units,
+        )
         if update_cfg_with_swivels:
             swivels = {
                 f'model.1.{"submodule.1." * i}swivel': {
@@ -63,7 +74,11 @@ def get_unet(
             }
 
     elif unet_cfg.arch == 'swinunetr':
-         unet = get_monai_swinunetr_arch(cfg)
+         unet = get_monai_swinunetr_arch(
+            in_channels  = unet_cfg.n_chans_in,
+            out_channels = unet_cfg.n_chans_out,
+            img_size     = unet_cfg.img_size,
+        )
 
     if update_cfg_with_swivels:
         OmegaConf.set_struct(cfg, False)
@@ -83,13 +98,10 @@ def get_unet(
 
 
 def get_default_unet_arch(
-    cfg: OmegaConf,
+    n_chans_in,
+    n_chans_out,   
+    n_filters_init
 ):
-    unet_cfg       = cfg.unet[cfg.run.data_key]
-    n_chans_in     = unet_cfg.n_chans_in
-    n_chans_out    = unet_cfg.n_chans_out
-    n_filters_init = unet_cfg.n_filters_init
-
     return UNet2D(
         n_chans_in=n_chans_in, 
         n_chans_out=n_chans_out, 
@@ -99,18 +111,14 @@ def get_default_unet_arch(
 
 
 def get_monai_unet_arch(
-    cfg: OmegaConf
+    in_channels,
+    out_channels,
+    n_filters_init,
+    depth,     
+    num_res_units
 ) -> nn.Module:
-
-    unet_cfg       = cfg.unet[cfg.run.data_key]
-    in_channels    = unet_cfg.n_chans_in
-    out_channels   = unet_cfg.n_chans_out
-    n_filters_init = unet_cfg.n_filters_init
-    depth          = unet_cfg.depth
-    num_res_units  = unet_cfg.num_res_units
-    channels       = [n_filters_init * 2 ** i for i in range(depth)]
-    strides        = [2] * (depth - 1)
-
+    channels = [n_filters_init * 2 ** i for i in range(depth)]
+    strides = [2] * (depth - 1)
     return UNet(
         spatial_dims=2,
         in_channels=in_channels,
@@ -123,14 +131,12 @@ def get_monai_unet_arch(
 
 
 def get_monai_swinunetr_arch(
-    cfg: OmegaConf,
+    in_channels,
+    out_channels,
+    img_size,
 ) -> nn.Module:
-    unet_cfg     = cfg.unet[cfg.run.data_key]
-    in_channels  = unet_cfg.n_chans_in
-    out_channels = unet_cfg.n_chans_out
-
     return SwinUNETR(
-        img_size=(256, 256),
+        img_size=img_size,
         in_channels=in_channels,
         out_channels=out_channels,
         spatial_dims=2
