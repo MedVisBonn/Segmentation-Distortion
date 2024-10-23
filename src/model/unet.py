@@ -28,6 +28,8 @@ from monai.utils import (
     look_up_option, 
     SkipMode
 )
+from monai.losses import DiceCELoss
+from monai.metrics import DiceMetric, MeanIoU
 
 
 
@@ -142,6 +144,99 @@ def get_monai_swinunetr_arch(
         spatial_dims=2
     )
 
+
+class LightningSegmentationModel(L.LightningModule):
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        patience: int = 5,
+        binary_target: bool = False,
+    ):
+        super().__init__()
+        self.model = model
+        self.patience = patience
+        self.loss = DiceCELoss(
+            softmax=False if binary_target else True,
+            sigmoid=True if binary_target else False,
+            to_onehot_y=False if binary_target else True,
+        )
+        self.dsc = DiceMetric(include_background=False, reduction="none")
+        self.IoU = MeanIoU(include_background=False, reduction="none")
+
+    def forward(self, inputs):        
+        return self.model(inputs)
+    
+    def training_step(self, batch, batch_idx):
+        input = batch['data']
+        target = batch['target']
+        outputs = self(input)
+        loss = self.loss(outputs, target)
+
+        self.log_dict({
+            'train_loss': loss
+        })
+        return {
+            'loss': loss
+        }
+    
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        input = batch['input']
+        target = batch['target']
+        
+        outputs = self(input)
+        loss = self.loss(outputs, target)
+        num_classes = outputs.shape[1]
+        if num_classes > 1:
+            outputs = outputs.argmax(1)
+        outputs = torch.nn.functional.one_hot(outputs, num_classes=num_classes).moveaxis(-1, 1)
+        dsc = self.dsc(outputs, target).nanmean()
+
+        self.log_dict({
+            'val_loss': loss,
+            'val_dsc': dsc,
+        })
+        return {
+            'loss': loss,
+        }
+    
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
+        input = batch['input']
+        target = batch['target']
+        outputs = self(input)
+        loss = self.loss(outputs, target)
+        num_classes = outputs.shape[1]
+        if num_classes > 1:
+            outputs = outputs.argmax(1)
+        outputs = torch.nn.functional.one_hot(outputs, num_classes=num_classes).moveaxis(-1, 1)
+        dsc = self.dsc(outputs, target).nanmean()
+
+
+        self.log_dict({
+            'test_loss': loss,
+            'test_dsc': dsc,
+        })
+        return {
+            'loss': loss,
+            'dsc': dsc
+        }
+    
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        input = batch['input']
+        outputs = self(input)
+        return outputs
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=self.patience),
+                'monitor': 'val_loss',
+                'frequency': 1,
+            }
+        }
+    
 
 
 class UNet2D(nn.Module):
