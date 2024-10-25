@@ -17,6 +17,7 @@ from typing import (
 from omegaconf import OmegaConf
 import torch
 from torch import nn
+import lightning as L
 from dpipe.layers.resblock import ResBlock2d
 from dpipe.layers.conv import PreActivation2d
 from monai.networks.nets import UNet, SwinUNETR
@@ -146,16 +147,22 @@ def get_monai_swinunetr_arch(
 
 
 class LightningSegmentationModel(L.LightningModule):
-
+    #TODO: change init to receive only config and save it as hyperparameter. Add get_unet method to get the model
     def __init__(
         self,
         model: torch.nn.Module,
+        lr: float = 1e-3,
         patience: int = 5,
         binary_target: bool = False,
+        cfg: OmegaConf = None
     ):
         super().__init__()
+        # this would save the model as hyperparameter, not desired!
+        self.save_hyperparameters(ignore=['model'])
         self.model = model
+        self.lr = lr
         self.patience = patience
+        self.cfg = cfg
         self.loss = DiceCELoss(
             softmax=False if binary_target else True,
             sigmoid=True if binary_target else False,
@@ -172,9 +179,17 @@ class LightningSegmentationModel(L.LightningModule):
         target = batch['target']
         outputs = self(input)
         loss = self.loss(outputs, target)
+        num_classes = max(outputs.shape[1], 2)
+        if num_classes > 2:
+            outputs = outputs.argmax(1)
+        else:
+            outputs = (outputs > 0.5) * 1
+        outputs = torch.nn.functional.one_hot(outputs, num_classes=num_classes).moveaxis(-1, 1)
+        dsc = self.dsc(outputs, target).nanmean()
 
         self.log_dict({
-            'train_loss': loss
+            'train_loss': loss,
+            'train_dsc': dsc,
         })
         return {
             'loss': loss
@@ -186,9 +201,11 @@ class LightningSegmentationModel(L.LightningModule):
         
         outputs = self(input)
         loss = self.loss(outputs, target)
-        num_classes = outputs.shape[1]
-        if num_classes > 1:
+        num_classes = max(outputs.shape[1], 2)
+        if num_classes > 2:
             outputs = outputs.argmax(1)
+        else:
+            outputs = (outputs > 0) * 1
         outputs = torch.nn.functional.one_hot(outputs, num_classes=num_classes).moveaxis(-1, 1)
         dsc = self.dsc(outputs, target).nanmean()
 
@@ -205,11 +222,13 @@ class LightningSegmentationModel(L.LightningModule):
         target = batch['target']
         outputs = self(input)
         loss = self.loss(outputs, target)
-        num_classes = outputs.shape[1]
-        if num_classes > 1:
+        num_classes = max(outputs.shape[1], 2)
+        if num_classes > 2:
             outputs = outputs.argmax(1)
+        else:
+            outputs = (outputs > 0) * 1
         outputs = torch.nn.functional.one_hot(outputs, num_classes=num_classes).moveaxis(-1, 1)
-        dsc = self.dsc(outputs, target).nanmean()
+        dsc = dice_metric(outputs, target).nanmean()
 
 
         self.log_dict({
@@ -227,7 +246,7 @@ class LightningSegmentationModel(L.LightningModule):
         return outputs
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         return {
             'optimizer': optimizer,
             'lr_scheduler': {

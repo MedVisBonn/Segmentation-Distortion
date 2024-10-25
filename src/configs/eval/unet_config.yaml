@@ -3,7 +3,7 @@ data:
   validation: False
   testing: []
   subset:
-    apply: False
+    apply: false
     params:
       n_cases: 256
       fraction: 0.1

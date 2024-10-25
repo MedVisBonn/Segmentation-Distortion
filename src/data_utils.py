@@ -68,11 +68,13 @@ class PMRIDataModule(L.LightningDataModule):
         data_dir: str,
         vendor_assignment: dict[str, str],
         batch_size: int = 32,
+        train_transforms: str = 'global_transforms',
     ):
         super().__init__()
         self.data_dir = data_dir
         self.vendor_assignment = vendor_assignment
         self.batch_size = batch_size
+        self.train_transforms = train_transforms
         self.transforms = Transforms(patch_size=[384, 384])
 
     def prepare_data(self):
@@ -111,7 +113,7 @@ class PMRIDataModule(L.LightningDataModule):
         
         return MultiThreadedAugmenter(
             data_loader=pmri_train_loader,
-            transform=self.transforms.get_transforms("global_transforms"),
+            transform=self.transforms.get_transforms(self.train_transforms),
             num_processes=4,
             num_cached_per_queue = 2, 
             seeds=None
@@ -158,14 +160,16 @@ class MNMv2DataModule(L.LightningDataModule):
         data_dir: str,
         vendor_assignment: dict,
         batch_size: int = 32,
-        binary_mask: bool = False,
+        binary_target: bool = False,
+        train_transforms: str = 'global_transforms',
         non_empty_target: bool = True,
     ):
         super().__init__()
         self.data_dir = data_dir
         self.vendor_assignment = vendor_assignment  # Should be a dict with keys 'train', 'val', 'test'
         self.batch_size = batch_size
-        self.binary_mask = binary_mask
+        self.train_transforms = train_transforms
+        self.binary_target = binary_target
         self.non_empty_target = non_empty_target
 
         self.transforms = Transforms(patch_size=[256, 256])  # Assuming similar transform object as PMRIDataModule
@@ -182,7 +186,7 @@ class MNMv2DataModule(L.LightningDataModule):
             mnm_full = MNMv2Dataset(
                 data_dir=self.data_dir,
                 vendor=self.vendor_assignment.get('train'),
-                binary_target=self.binary_mask,
+                binary_target=self.binary_target,
                 non_empty_target=self.non_empty_target,
                 normalize=True,  # Always normalizing
             )
@@ -193,7 +197,7 @@ class MNMv2DataModule(L.LightningDataModule):
             self.mnm_test = MNMv2Dataset(
                 data_dir=self.data_dir,
                 vendor=self.vendor_assignment.get('test'),
-                binary_target=self.binary_mask,
+                binary_target=self.binary_target,
                 non_empty_target=self.non_empty_target,
                 normalize=True,
             )
@@ -202,7 +206,7 @@ class MNMv2DataModule(L.LightningDataModule):
             self.mnm_predict = MNMv2Dataset(
                 data_dir=self.data_dir,
                 vendor=self.vendor_assignment.get('predict', self.vendor_assignment.get('test')),
-                binary_target=self.binary_mask,
+                binary_target=self.binary_target,
                 non_empty_target=self.non_empty_target,
                 normalize=True,
             )
@@ -217,7 +221,7 @@ class MNMv2DataModule(L.LightningDataModule):
         
         return MultiThreadedAugmenter(
             data_loader=mnm_train_loader,
-            transform=self.transforms.get_transforms("global_transforms"),
+            transform=self.transforms.get_transforms(self.train_transforms),
             num_processes=4,
             num_cached_per_queue=2,
             seeds=None
