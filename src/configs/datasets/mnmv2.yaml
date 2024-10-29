@@ -1,0 +1,5 @@
+data_dir: "../../../../../data/MNM/"
+vendor_assignment: {'train': 'siemens', 'test': 'ge'}
+batch_size: 32
+binary_target: False
+non_empty_target: False
